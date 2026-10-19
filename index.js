@@ -1,3 +1,4 @@
+require('http').createServer((req, res) => res.end('Bot Online')).listen(process.env.PORT || 3000);
 const {
     default: makeWASocket,
     useMultiFileAuthState,

@@ -1,8 +1,6 @@
 const http = require('http');
 http.createServer((req, res) => res.end('Bot Online')).listen(process.env.PORT || 3000);
 
-console.log('Iniciando o bot...');
-
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -27,157 +25,133 @@ const delegatedOwners = new Set();
 
 let tgBot = null;
 if (TELEGRAM_TOKEN) {
-    try {
-        tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
-        console.log('🤖 Telegram Bot ativado com sucesso!');
-    } catch (e) {
-        console.log('⚠️ Erro ao iniciar Telegram Bot:', e.message);
-    }
+    tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+    console.log('🤖 Telegram Bot ativado!');
 }
 
 async function startBot() {
-    try {
-        const { state, saveCreds } = await useMultiFileAuthState('./session');
-        const { version } = await fetchLatestBaileysVersion();
+    const { state, saveCreds } = await useMultiFileAuthState('./session');
+    const { version } = await fetchLatestBaileysVersion();
 
-        const sock = makeWASocket({
-            version,
-            logger: pino({ level: 'silent' }),
-            printQRInTerminal: false,
-            auth: {
-                creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
-            },
-            generateHighQualityLinkPreview: true
+    const sock = makeWASocket({
+        version,
+        logger: pino({ level: 'silent' }),
+        printQRInTerminal: false,
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
+        },
+        generateHighQualityLinkPreview: true
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    if (tgBot) {
+        // Remove ouvintes anteriores para evitar duplicados
+        tgBot.removeAllListeners('text');
+        
+        tgBot.onText(/\/conectar (.+)/, async (msg, match) => {
+            const chatId = msg.chat.id;
+            let phone = match[1].replace(/[^0-9]/g, '');
+            if (!phone) {
+                return tgBot.sendMessage(chatId, '❌ Formato inválido. Use: /conectar 258856868102');
+            }
+            try {
+                // Se já estiver registcado, avisa
+                if (sock.authState.creds.registered) {
+                    return tgBot.sendMessage(chatId, '⚠️ O WhatsApp já está conectado nesta sessão!');
+                }
+                
+                await delay(3000);
+                const code = await sock.requestPairingCode(phone);
+                const codigoFormatado = code?.match(/.{1,4}/g)?.join('-') || code;
+                
+                tgBot.sendMessage(chatId, `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 Código de Pareamento:\n\n\`${codigoFormatado}\`\n\nIntroduza este código imediatamente no WhatsApp!`, { parse_mode: 'Markdown' });
+            } catch (err) {
+                tgBot.sendMessage(chatId, `❌ Erro ao gerar código: ${err.message}`);
+            }
         });
+    }
 
-        sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect } = update;
+        if (connection === 'close') {
+            const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
+            console.log('Conexão fechada. Reconectando...', shouldReconnect);
+            if (shouldReconnect) startBot();
+        } else if (connection === 'open') {
+            console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE COM SUCESSO! ⚡');
+            if (TELEGRAM_CHAT_ID && tgBot) {
+                tgBot.sendMessage(TELEGRAM_CHAT_ID, '⚡ 🟢 MENTEMALUCA BOT ESTÁ ONLINE NO WHATSAPP! ⚡');
+            }
+        }
+    });
 
-        if (tgBot) {
-            tgBot.onText(/\/conectar (.+)/, async (msg, match) => {
-                const chatId = msg.chat.id;
-                let phone = match[1].replace(/[^0-9]/g, '');
-                if (!phone) {
-                    return tgBot.sendMessage(chatId, '❌ Formato inválido. Use: /conectar 258856868102');
-                }
-                try {
-                    await delay(2000);
-                    const code = await sock.requestPairingCode(phone);
-                    tgBot.sendMessage(chatId, `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 Seu Código de Pareamento WhatsApp:\n\n\`${code}\`\n\nIntroduza este código no seu WhatsApp!`, { parse_mode: 'Markdown' });
-                } catch (err) {
-                    tgBot.sendMessage(chatId, `❌ Erro ao gerar código: ${err.message}`);
-                }
-            });
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (type !== 'notify') return;
+        const msg = messages[0];
+        if (!msg.message) return;
+
+        const from = msg.key.remoteJid;
+        const isGroup = from.endsWith('@g.us');
+        const sender = msg.key.participant || from;
+        const senderClean = sender.replace(/[^0-9]/g, '');
+        const isOwner = senderClean.includes(OWNER_NUMBER) || msg.key.fromMe;
+
+        const body = (msg.message.conversation ||
+                     msg.message.extendedTextMessage?.text ||
+                     msg.message.imageMessage?.caption ||
+                     msg.message.videoMessage?.caption || '').trim();
+
+        if (!body.startsWith(PREFIX)) return;
+
+        const args = body.slice(PREFIX.length).trim().split(/ +/);
+        const command = args.shift()?.toLowerCase();
+
+        if (command === 'menu') {
+            const menuTexto = [
+                "╔══════════════════════════════════╗",
+                "║  🔮 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝔹𝕆𝕋 🔮  ║",
+                "║       ✦ 𝑏𝑜𝑡 𝑑𝑜 𝑑𝑜𝑛𝑜 ✦       ║",
+                "╠══════════════════════════════════╣",
+                "╚══════════════════════════════════╝",
+                "",
+                "𝕀ℕ𝔽𝕆ℝ𝕄𝔸Ç𝔸̃𝕆 𝔾𝔼ℝ𝔸𝕃",
+                "  🟢 Status: *Online*",
+                "  👑 Dono: *+258856868102*",
+                "  🤖 Versão: *2.0 Pro*",
+                "  🔑 Prefixo: *€*",
+                "",
+                "━━━ 👑 𝔽𝕌ℕÇ𝕆̃𝔼𝕊 𝔻𝕆 𝔻𝕆ℕ𝕆 (só dono) ━━━",
+                "│ 💣 *€nuke* — Remove todos os membros",
+                "│ 🔇 *€silenciar @num* — Silencia um membro",
+                "│ 🔉 *€dessilenciar @num* — Dessilencia o membro",
+                "│ 🔓 *€abrir* — Abre o grupo para todos",
+                "│ 🔒 *€fechar* — Fecha o grupo (só admins)",
+                "│ ⭐ *€promover @num* — Promove a admin",
+                "│ ⬇️ *€rebaixar @num* — Remove admin",
+                "│ 🚫 *€ban @num* — Banir membro do grupo",
+                "│ 🔗 *€link* — Obtém link de convite",
+                "│ 🧹 *€limpar* — Limpar chat",
+                "",
+                "━━━ 🎮 𝕌𝕋𝕀𝕃𝕀𝕋Á𝕊 ━━━",
+                "│ 🎮 *€quiz* — Quiz interativo",
+                "│ 🌍 *€hora* — Hora atual",
+                "│ 🏓 *€ping* — Status e latência",
+                "│ 📋 *€menu* — Abre este menu",
+                "",
+                "╔══════════════════════════════════╗",
+                "║  ⚡ 🟢 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝕆ℕ𝕃𝕀ℕ𝔼 ⚡  ║",
+                "╚══════════════════════════════════╝"
+            ].join("\n");
+
+            return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
         }
 
-        sock.ev.on('connection.update', (update) => {
-            const { connection, lastDisconnect } = update;
-            if (connection === 'close') {
-                const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
-                console.log('Conexão fechada. Reconectando...', shouldReconnect);
-                if (shouldReconnect) startBot();
-            } else if (connection === 'open') {
-                console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE COM SUCESSO! ⚡');
-                if (TELEGRAM_CHAT_ID && tgBot) {
-                    tgBot.sendMessage(TELEGRAM_CHAT_ID, '⚡ 🟢 MENTEMALUCA BOT ESTÁ ONLINE NO WHATSAPP! ⚡');
-                }
-            }
-        });
-
-        sock.ev.on('messages.upsert', async ({ messages, type }) => {
-            if (type !== 'notify') return;
-            const msg = messages[0];
-            if (!msg.message) return;
-
-            const from = msg.key.remoteJid;
-            const isGroup = from.endsWith('@g.us');
-            const sender = msg.key.participant || from;
-            const senderClean = sender.replace(/[^0-9]/g, '');
-
-            const isOwner = senderClean.includes(OWNER_NUMBER) || msg.key.fromMe || delegatedOwners.has(senderClean);
-
-            if (mutedUsers.has(senderClean)) {
-                try { await sock.sendMessage(from, { delete: msg.key }); } catch (e) {}
-                return;
-            }
-
-            const body = (msg.message.conversation ||
-                         msg.message.extendedTextMessage?.text ||
-                         msg.message.imageMessage?.caption ||
-                         msg.message.videoMessage?.caption || '').trim();
-
-            if (!body.startsWith(PREFIX)) return;
-
-            const args = body.slice(PREFIX.length).trim().split(/ +/);
-            const command = args.shift()?.toLowerCase();
-
-            if (command === 'menu') {
-                const menuTexto = [
-                    "╔══════════════════════════════════╗",
-                    "║  🔮 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝔹𝕆𝕋 🔮  ║",
-                    "║       ✦ 𝑏𝑜𝑡 𝑑𝑜 𝑑𝑜𝑛𝑜 ✦       ║",
-                    "╠══════════════════════════════════╣",
-                    "╚══════════════════════════════════╝",
-                    "",
-                    "𝕀ℕ𝔽𝕆ℝ𝕄𝔸Ç𝔸̃𝕆 𝔾𝔼ℝ𝔸𝕃",
-                    "  🟢 Status: *Online*",
-                    "  👑 Dono: *+258856868102*",
-                    "  🤖 Versão: *2.0 Pro*",
-                    "  🔑 Prefixo: *€*",
-                    "",
-                    "━━━ 👑 𝔽𝕌ℕÇ𝕆̃𝔼𝕊 𝔻𝕆 𝔻𝕆ℕ𝕆 (só dono) ━━━",
-                    "│ 💣 *€nuke* — Remove todos os membros",
-                    "│ 🔇 *€silenciar @num* — Silencia um membro",
-                    "│ 🔉 *€dessilenciar @num* — Dessilencia o membro",
-                    "│ 🔓 *€abrir* — Abre o grupo para todos",
-                    "│ 🔒 *€fechar* — Fecha o grupo (só admins)",
-                    "│ ⭐ *€promover @num* — Promove a admin",
-                    "│ ⬇️ *€rebaixar @num* — Remove admin",
-                    "│ 🚫 *€ban @num* — Banir membro do grupo",
-                    "│ 🔗 *€link* — Obtém link de convite",
-                    "│ 🧹 *€limpar* — Limpa o chat atual",
-                    "",
-                    "━━━ 🍑 𝕄Í𝔻𝕀𝔸 𝙋ℝ𝕀𝕍𝔸𝔻𝔸 ━━━",
-                    "│ 🍑 *€viewonce* — Revela view once",
-                    "│ 🥹 *€salvar* — Guarda mídia citada",
-                    "",
-                    "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝕃 ━━━",
-                    "│ 🤖 *€ia [pergunta]* — Pergunta à IA",
-                    "│ 😇 *€ia auto* — Liga IA automática",
-                    "│ 🛑 *€ia desligar* — Desliga a IA",
-                    "",
-                    "━━━ 🎵 𝔻𝕆𝕎ℕ𝕃𝕆𝔸𝔻𝕊 ━━━",
-                    "│ 🎵 *€baixar música [nome]* — Baixa MP3",
-                    "│ 🎬 *€baixar vídeo [nome]* — Baixa vídeo",
-                    "│ 📷 *€baixar foto [nome]* — Busca foto",
-                    "",
-                    "━━━ 🎭 𝕄Í𝔻𝕀𝔸 / 𝔼𝔽𝔼𝕀𝕋𝕆𝕊 ━━━",
-                    "│ 🎭 *€sticker* — Cria figurinhas",
-                    "│ 🎙️ *€áudio [texto]* — Fala com voz",
-                    "│ 😎 *€perfil @Pessoa* — Mostra perfil",
-                    "",
-                    "━━━ 🎮 𝕌𝕋𝕀𝕃𝕀𝕋Á𝕊 ━━━",
-                    "│ 🎮 *€quiz* — Quiz interativo",
-                    "│ 🧩 *€charada* — Jogo de charadas",
-                    "│ 🌍 *€hora* — Hora em vários países",
-                    "│ 🏓 *€ping* — Status e latência",
-                    "│ 📋 *€menu* — Abre este menu",
-                    "",
-                    "╔══════════════════════════════════╗",
-                    "║  ⚡ 🟢 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝕆ℕ𝕃𝕀ℕ𝔼 ⚡  ║",
-                    "╚══════════════════════════════════╝"
-                ].join("\n");
-
-                return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
-            }
-
-            if (command === 'ping') {
-                return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo e online.' }, { quoted: msg });
-            }
-        });
-    } catch (err) {
-        console.error('❌ ERRO CRÍTICO NO STARTBOT:', err);
-    }
+        if (command === 'ping') {
+            return sock.sendMessage(from, { text: '🏓 Pong! Bot online e operacional.' }, { quoted: msg });
+        }
+    });
 }
 
 startBot();

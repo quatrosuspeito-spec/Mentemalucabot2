@@ -19,7 +19,6 @@ const {
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
-const googleTTS = require('google-tts-api');
 require('dotenv').config();
 
 const PREFIX = process.env.BOT_PREFIX || '€';
@@ -221,25 +220,15 @@ async function startWhatsAppBot() {
                 "│ 🍑 *€viewonce* — Revela view once",
                 "│ 🥹 *€salvar* — Guarda mídia citada",
                 "",
-                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝕃 ━━━",
+                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝔏 ━━━",
                 "│ 🤖 *€ia [pergunta]* — Pergunta à IA",
                 "│ 😇 *€ia auto* — Liga IA automática",
                 "│ 🛑 *€ia desligar* — Desliga a IA",
                 "",
-                "━━━ 🎵 𝔻𝕆𝕎ℕ𝕃𝕆𝔸𝔻𝕊 ━━━",
-                "│ 🎵 *€baixar música [nome]* — Baixa MP3",
-                "│ 🎬 *€baixar vídeo [nome]* — Baixa vídeo",
-                "│ 📷 *€baixar foto [nome]* — Busca foto",
-                "",
-                "━━━ 🎭 𝕄Í𝔻𝕀𝔸 / 𝔼𝔽𝔼𝕀𝕋𝕆𝕊 ━━━",
-                "│ 🎭 *€sticker* — Cria figurinhas",
-                "│ 🎙️ *€áudio [texto]* — Fala com voz",
-                "│ 😎 *€perfil @Pessoa* — Mostra perfil",
-                "",
                 "━━━ 🎮 𝕌𝕋𝕀𝕃𝕀𝕋Á𝕊 ━━━",
                 "│ 🎮 *€quiz* — Quiz interativo",
                 "│ 🧩 *€charada* — Jogo de charadas",
-                "│ 🌍 *€hora* — Hora em vários países",
+                "│ 🌍 *€hora* — Hora em Moçambique",
                 "│ 🏓 *€ping* — Status e latência",
                 "│ 📋 *€menu* — Abre este menu",
                 "",
@@ -298,7 +287,7 @@ async function startWhatsAppBot() {
             return sock.sendMessage(from, { text: '🛑 IA Automática desligada!' }, { quoted: msg });
         }
 
-        // 7. FUNÇÕES DE DONO / GRUPO (NUKE, BAN, SILENCIAR, ABRIR, FECHAR, PROMOVER, REBAIXAR)
+        // 7. FUNÇÕES DE DONO / GRUPO
         if (command === 'nuke') {
             if (!isGroup || !isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar em grupos!' }, { quoted: msg });
             try {
@@ -375,25 +364,27 @@ async function startWhatsAppBot() {
             } catch (e) {}
         }
 
-        // 8. MÍDIA PRIVADA / SALVAR / VIEWONCE
+        // 8. MÍDIA / SALVAR VIEW ONCE
         if (command === 'salvar' || command === 'viewonce') {
             const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
             if (!quoted) return sock.sendMessage(from, { text: '❌ Marque uma imagem ou vídeo viewonce/mídia!' }, { quoted: msg });
             try {
-                const mediaMsg = quoted.imageMessage || quoted.videoMessage || quoted.audioMessage;
-                if (!mediaMsg) return sock.sendMessage(from, { text: '❌ A mensagem citada não contém mídia.' }, { quoted: msg });
+                const mediaMsg = quoted.imageMessage || quoted.videoMessage;
+                if (!mediaMsg) return sock.sendMessage(from, { text: '❌ A mensagem citada não contém mídia válida.' }, { quoted: msg });
                 
                 const buffer = await downloadMediaMessage({ message: quoted }, 'buffer', {});
-                const tipo = quoted.imageMessage ? 'image' : quoted.videoMessage ? 'video' : 'audio';
-                
-                if (tipo === 'image') {
+                if (quoted.imageMessage) {
                     await sock.sendMessage(from, { image: buffer, caption: '✅ Mídia recuperada com sucesso!' });
-                } else if (tipo === 'video') {
+                } else if (quoted.videoMessage) {
                     await sock.sendMessage(from, { video: buffer, caption: '✅ Mídia recuperada com sucesso!' });
                 }
             } catch (err) {
                 return sock.sendMessage(from, { text: '❌ Erro ao descarregar a mídia.' }, { quoted: msg });
             }
         }
+    });
+}
 
-        // 9. ÁUDIO TTS
+// Iniciar os serviços
+startWhatsAppBot();
+startTelegramPoller();

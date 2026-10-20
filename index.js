@@ -23,7 +23,6 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const mutedUsers = new Set();
 const delegatedOwners = new Set();
 
-// Banco de dados simples para Quiz
 const quizDatabase = [
     {
         pergunta: "Qual é a capital de Moçambique?",
@@ -47,7 +46,7 @@ let activeQuiz = {};
 let tgBot = null;
 if (TELEGRAM_TOKEN) {
     tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
-    console.log('🤖 Telegram Bot ativado com novo token!');
+    console.log('🤖 Telegram Bot ativado com sucesso!');
 
     tgBot.on('polling_error', (err) => {
         console.log('⚠️ Polling aviso:', err.message);
@@ -119,7 +118,6 @@ async function startBot() {
         const sender = msg.key.participant || from;
         const senderClean = sender.replace(/[^0-9]/g, '');
         
-        // Verificação precisa do Dono
         const isOwner = senderClean.includes(OWNER_NUMBER) || msg.key.fromMe || delegatedOwners.has(senderClean);
 
         if (mutedUsers.has(senderClean)) {
@@ -132,7 +130,6 @@ async function startBot() {
                      msg.message.imageMessage?.caption ||
                      msg.message.videoMessage?.caption || '').trim();
 
-        // Verificação de resposta ao Quiz (A, B, C, D)
         if (activeQuiz[from] && ['A', 'B', 'C', 'D'].includes(body.toUpperCase())) {
             const quizAtual = activeQuiz[from];
             if (body.toUpperCase() === quizAtual.resposta) {
@@ -149,7 +146,6 @@ async function startBot() {
         const args = body.slice(PREFIX.length).trim().split(/ +/);
         const command = args.shift()?.toLowerCase();
 
-        // 1. MENU
         if (command === 'menu') {
             const menuTexto = [
                 "╔══════════════════════════════════╗",
@@ -185,7 +181,7 @@ async function startBot() {
                 "│ 😇 *€ia auto* — Liga IA automática",
                 "│ 🛑 *€ia desligar* — Desliga a IA",
                 "",
-                "━━━ 🎵 𝔻𝕆𝕎ℕ𝕃𝕆𝔸𝔻𝕊 ━━━",
+                "━━━ 🎵 𝔻𝕆𝕎ℕ𝓞𝔸𝔻𝕊 ━━━",
                 "│ 🎵 *€baixar música [nome]* — Baixa MP3",
                 "│ 🎬 *€baixar vídeo [nome]* — Baixa vídeo",
                 "│ 📷 *€baixar foto [nome]* — Busca foto",
@@ -210,12 +206,10 @@ async function startBot() {
             return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
         }
 
-        // 2. PING
         if (command === 'ping') {
             return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo, rápido e online.' }, { quoted: msg });
         }
 
-        // 3. NUKE (REMOVER TODOS DO GRUPO)
         if (command === 'nuke') {
             if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
             if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode executar o Nuke!' }, { quoted: msg });
@@ -245,7 +239,6 @@ async function startBot() {
             }
         }
 
-        // 4. QUIZ
         if (command === 'quiz') {
             const randomQuiz = quizDatabase[Math.floor(Math.random() * quizDatabase.length)];
             activeQuiz[from] = randomQuiz;
@@ -254,7 +247,6 @@ async function startBot() {
             return sock.sendMessage(from, { text: quizTexto }, { quoted: msg });
         }
 
-        // 5. BAN INDIVIDUAL
         if (command === 'ban') {
             if (!isGroup) return sock.sendMessage(from, { text: '❌ Apenas em grupos!' }, { quoted: msg });
             if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode banir!' }, { quoted: msg });
@@ -270,7 +262,6 @@ async function startBot() {
             }
         }
 
-        // 6. LINK DO GRUPO
         if (command === 'link') {
             if (!isGroup) return sock.sendMessage(from, { text: '❌ Apenas em grupos!' }, { quoted: msg });
             try {
@@ -281,20 +272,26 @@ async function startBot() {
             }
         }
 
-        // 7. ABRIR / FECHAR
         if (command === 'abrir') {
             if (!isGroup || !isOwner) return;
-            await sock.groupSettingUpdate(from, 'not_announcement');
-            return sock.sendMessage(from, { text: '🔓 Grupo aberto!' }, { quoted: msg });
+            try {
+                await sock.groupSettingUpdate(from, 'not_announcement');
+                return sock.sendMessage(from, { text: '🔓 Grupo aberto!' }, { quoted: msg });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ O bot precisa de ser Administrador.' }, { quoted: msg });
+            }
         }
 
         if (command === 'fechar') {
             if (!isGroup || !isOwner) return;
-            await sock.groupSettingUpdate(from, 'announcement');
-            return sock.sendMessage(from, { text: '🔒 Grupo fechado!' }, { quoted: msg });
+            try {
+                await sock.groupSettingUpdate(from, 'announcement');
+                return sock.sendMessage(from, { text: '🔒 Grupo fechado!' }, { quoted: msg });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ O bot precisa de ser Administrador.' }, { quoted: msg });
+            }
         }
 
-        // 8. SILENCIAR / DESSILENCIAR
         if (command === 'silenciar') {
             if (!isGroup || !isOwner) return;
             const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
@@ -315,7 +312,6 @@ async function startBot() {
             }
         }
 
-        // 9. IA
         if (command === 'ia') {
             const pergunta = args.join(' ');
             if (!pergunta) return sock.sendMessage(from, { text: '❌ Faça uma pergunta: €ia <texto>' }, { quoted: msg });
@@ -329,7 +325,6 @@ async function startBot() {
             }
         }
 
-        // 10. HORA
         if (command === 'hora') {
             const dataHora = new Date().toLocaleString('pt-PT', { timeZone: 'Africa/Maputo' });
             return sock.sendMessage(from, { text: `🌍 Hora atual: *${dataHora}*` }, { quoted: msg });

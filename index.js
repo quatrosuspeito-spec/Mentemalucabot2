@@ -17,19 +17,19 @@ const {
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
     delay,
-    downloadMediaMessage
+    downloadMediaMessage,
+    Browsers
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
 const https = require('https');
+const fs = require('fs');
 require('dotenv').config();
 
 const PREFIX = process.env.BOT_PREFIX || '€';
 const OWNER_NUMBER = '258856868102';
-// NOVO TOKEN GERADO PELO BOTFATHER:
 const TELEGRAM_TOKEN = '8892332641:AAEP0ZxoamGQsWGg4X-24P2K7c78WGZT-nY';
 
-// Agent HTTPS com IPv4 forçado para evitar erros no Render
 const httpsAgent = new https.Agent({
     family: 4,
     keepAlive: true,
@@ -75,14 +75,11 @@ async function sendTelegramMessage(chatId, text, parseMode = '') {
 
 /* STREAMING_CHUNK:Initializing Telegram Poller */
 async function startTelegramPoller() {
-    console.log('🤖 A iniciar ligação ao Telegram com novo token...');
+    console.log('🤖 A iniciar ligação ao Telegram...');
     
     try {
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
-        console.log('✅ Webhooks antigos eliminados e novo token validado com sucesso!');
-    } catch (e) {
-        console.log('⚠️ Tentando reconectar Telegram:', e.response?.data || e.message);
-    }
+    } catch (e) {}
 
     setInterval(async () => {
         try {
@@ -115,13 +112,16 @@ async function startTelegramPoller() {
                         }
 
                         try {
-                            await delay(1000);
+                            await delay(2000);
                             const code = await globalSock.requestPairingCode(phone);
-                            const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 Seu Código de Pareamento:\n\n\`${code}\`\n\nIntroduza este código no seu WhatsApp imediatamente!`;
+                            const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
+                            
+                            const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 Seu Código de Pareamento:\n\n\`${formattedCode}\`\n\nIntroduza este código com os traços no WhatsApp no menu "Conectar um Aparelho"!`;
                             await sendTelegramMessage(chatId, resposta, 'Markdown');
-                            console.log('✅ Código gerado e enviado para o Telegram!');
+                            console.log(`✅ Código gerado com sucesso: ${formattedCode}`);
                         } catch (err) {
-                            await sendTelegramMessage(chatId, `❌ Erro ao gerar código: ${err.message}`);
+                            console.log('Erro ao solicitar código:', err);
+                            await sendTelegramMessage(chatId, `❌ Erro ao gerar código: ${err.message}. Reinicie a sessão e tente novamente.`);
                         }
                     }
                 }
@@ -139,11 +139,15 @@ async function startWhatsAppBot() {
         version,
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
+        browser: Browsers.ubuntu('Chrome'), // Identificação de navegador para aceitar o pairing code
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
         },
-        generateHighQualityLinkPreview: true
+        generateHighQualityLinkPreview: true,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 10000
     });
 
     globalSock = sock;
@@ -152,8 +156,15 @@ async function startWhatsAppBot() {
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
-            console.log('Conexão fechada. Reconectando...', shouldReconnect);
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const shouldReconnect = (statusCode !== DisconnectReason.loggedOut);
+            console.log(`Conexão fechada (${statusCode}). Reconectando...`, shouldReconnect);
+            
+            if (statusCode === DisconnectReason.loggedOut) {
+                if (fs.existsSync('./session')) {
+                    fs.rmSync('./session', { recursive: true, force: true });
+                }
+            }
             if (shouldReconnect) startWhatsAppBot();
         } else if (connection === 'open') {
             console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');

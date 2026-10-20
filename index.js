@@ -14,10 +14,12 @@ const {
     DisconnectReason,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-    delay
+    delay,
+    downloadMediaMessage
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
+const googleTTS = require('google-tts-api');
 require('dotenv').config();
 
 const PREFIX = process.env.BOT_PREFIX || '€';
@@ -26,8 +28,24 @@ const TELEGRAM_TOKEN = '8892332641:AAFL7pp9MiEggo6ztp2tuT1l4Wuovc5X6Ec';
 
 let globalSock = null;
 let lastUpdateId = 0;
+const mutedUsers = new Set();
+let activeQuiz = {};
+let activeCharadas = {};
+let aiAutoGroups = new Set();
 
-// Função para enviar mensagens para o Telegram via API HTTP direta
+const quizDatabase = [
+    { pergunta: "Qual é a capital de Moçambique?", opcoes: "A) Beira\nB) Maputo\nC) Nampula\nD) Pemba", resposta: "B" },
+    { pergunta: "Qual é o planeta mais próximo do Sol?", opcoes: "A) Vénus\nB) Terra\nC) Mercúrio\nD) Marte", resposta: "C" },
+    { pergunta: "Quanto é 15 x 4?", opcoes: "A) 50\nB) 60\nC) 70\nD) 80", resposta: "B" }
+];
+
+const charadasDatabase = [
+    { pergunta: "O que é, o que é? Tem cabeça e tem dente, não é bicho e nem é gente.", resposta: "alho" },
+    { pergunta: "O que é, o que é? Quanto mais se tira, maior fica.", resposta: "buraco" },
+    { pergunta: "O que é, o que é? Dá muitas voltas e não sai do lugar.", resposta: "relogio" }
+];
+
+// Enviar mensagens para o Telegram via HTTP Direto
 async function sendTelegramMessage(chatId, text, parseMode = '') {
     try {
         await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
@@ -40,7 +58,7 @@ async function sendTelegramMessage(chatId, text, parseMode = '') {
     }
 }
 
-// Leitor de mensagens do Telegram super seguro por HTTP (Sem erros de Polling/401)
+// Leitor HTTP de comandos do Telegram para o pareamento
 async function startTelegramPoller() {
     console.log('🤖 Leitor HTTP do Telegram iniciado com sucesso!');
     setInterval(async () => {
@@ -57,11 +75,10 @@ async function startTelegramPoller() {
 
                     const chatId = msg.chat.id;
                     const text = msg.text.trim();
-                    console.log(`📩 Comando recebido no Telegram: ${text}`);
 
                     if (text.startsWith('/conectar') || text.startsWith('/start')) {
                         const parts = text.split(' ');
-                        let phone = parts[1] ? parts[1].replace(/[^0-9]/g, '') : '258856868102';
+                        let phone = parts[1] ? parts[1].replace(/[^0-9]/g, '') : OWNER_NUMBER;
 
                         if (!globalSock) {
                             await sendTelegramMessage(chatId, '⚠️ O WhatsApp ainda está a iniciar no servidor. Aguarde 10 segundos e tente novamente.');
@@ -78,16 +95,13 @@ async function startTelegramPoller() {
                             const code = await globalSock.requestPairingCode(phone);
                             const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 Seu Código de Pareamento:\n\n\`${code}\`\n\nIntroduza este código no seu WhatsApp imediatamente!`;
                             await sendTelegramMessage(chatId, resposta, 'Markdown');
-                            console.log('✅ Código de pareamento gerado e enviado com sucesso!');
                         } catch (err) {
                             await sendTelegramMessage(chatId, `❌ Erro ao gerar código: ${err.message}`);
                         }
                     }
                 }
             }
-        } catch (err) {
-            // Ignora falhas temporárias de rede
-        }
+        } catch (err) {}
     }, 2000);
 }
 
@@ -113,7 +127,6 @@ async function startWhatsAppBot() {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
-            console.log('Conexão fechada. Reconectando...', shouldReconnect);
             if (shouldReconnect) startWhatsAppBot();
         } else if (connection === 'open') {
             console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');
@@ -126,31 +139,261 @@ async function startWhatsAppBot() {
         if (!msg.message) return;
 
         const from = msg.key.remoteJid;
+        const isGroup = from.endsWith('@g.us');
+        const sender = msg.key.participant || from;
+        const senderClean = sender.replace(/[^0-9]/g, '');
+        const isOwner = senderClean.includes(OWNER_NUMBER) || msg.key.fromMe;
+
+        if (mutedUsers.has(senderClean)) {
+            try { await sock.sendMessage(from, { delete: msg.key }); } catch (e) {}
+            return;
+        }
+
         const body = (msg.message.conversation ||
-                     msg.message.extendedTextMessage?.text || '').trim();
+                     msg.message.extendedTextMessage?.text ||
+                     msg.message.imageMessage?.caption ||
+                     msg.message.videoMessage?.caption || '').trim();
+
+        // Resposta a Quiz ativo
+        if (activeQuiz[from] && ['A', 'B', 'C', 'D'].includes(body.toUpperCase())) {
+            const q = activeQuiz[from];
+            if (body.toUpperCase() === q.resposta) {
+                await sock.sendMessage(from, { text: `🎉 *CORRETO!* A resposta era a letra *${q.resposta}*.` }, { quoted: msg });
+            } else {
+                await sock.sendMessage(from, { text: `❌ *ERRADO!* A resposta correta era a letra *${q.resposta}*.` }, { quoted: msg });
+            }
+            delete activeQuiz[from];
+            return;
+        }
+
+        // Resposta a Charadas ativo
+        if (activeCharadas[from]) {
+            const respCerta = activeCharadas[from];
+            if (body.toLowerCase().includes(respCerta)) {
+                await sock.sendMessage(from, { text: `🎉 *ACERTOU!* A resposta era *${respCerta}*.` }, { quoted: msg });
+                delete activeCharadas[from];
+                return;
+            }
+        }
+
+        // IA Automática se ativada no grupo
+        if (aiAutoGroups.has(from) && !body.startsWith(PREFIX) && !msg.key.fromMe) {
+            try {
+                const response = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(body)}&format=json`);
+                const respostaIA = response.data.AbstractText || "Interessante! Estou a processar a sua mensagem.";
+                await sock.sendMessage(from, { text: `🤖 *IA:* ${respostaIA}` }, { quoted: msg });
+            } catch (e) {}
+            return;
+        }
 
         if (!body.startsWith(PREFIX)) return;
-        const command = body.slice(PREFIX.length).trim().split(/ +/)[0]?.toLowerCase();
+        const args = body.slice(PREFIX.length).trim().split(/ +/);
+        const command = args.shift()?.toLowerCase();
 
+        // 1. MENU
         if (command === 'menu') {
-            const menu = [
-                "╔═══════════════════════════════╗",
-                "║  🔮 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝔹𝕆𝕋 2.0 🔮  ║",
-                "╠═══════════════════════════════╣",
-                "│ 📋 *€menu* — Mostra este menu",
-                "│ 🏓 *€ping* — Testa a latência",
-                "│ 🌍 *€hora* — Hora atual",
-                "╚═══════════════════════════════╝"
+            const menuTexto = [
+                "╔══════════════════════════════════╗",
+                "║  🔮 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝔹𝕆𝕋 🔮  ║",
+                "║       ✦ 𝑏𝑜𝑡 𝑑𝑜 𝑑𝑜𝑛𝑜 ✦       ║",
+                "╠══════════════════════════════════╣",
+                "╚══════════════════════════════════╝",
+                "",
+                "𝕀ℕ𝔽𝕆ℝ𝕄𝔸Ç𝔸̃𝕆 𝔾𝔼ℝ𝔸𝕃",
+                "  🟢 Status: *Online*",
+                "  👑 Dono: *+258856868102*",
+                "  🤖 Versão: *2.0 Pro*",
+                "  🔑 Prefixo: *€*",
+                "",
+                "━━━ 👑 𝔽𝕌ℕÇ𝕆̃𝔼𝕊 𝔻𝕆 𝔻𝕆ℕ𝕆 (só dono) ━━━",
+                "│ 💣 *€nuke* — Remove todos os membros",
+                "│ 🔇 *€silenciar @num* — Silencia um membro",
+                "│ 🔉 *€dessilenciar @num* — Dessilencia o membro",
+                "│ 🔓 *€abrir* — Abre o grupo para todos",
+                "│ 🔒 *€fechar* — Fecha o grupo (só admins)",
+                "│ ⭐ *€promover @num* — Promove a admin",
+                "│ ⬇️ *€rebaixar @num* — Remove admin",
+                "│ 🚫 *€ban @num* — Banir membro do grupo",
+                "│ 🔗 *€link* — Obtém link de convite",
+                "│ 🧹 *€limpar* — Limpa o chat atual",
+                "",
+                "━━━ 🍑 𝕄Í𝔻𝕀𝔸 𝙋ℝ𝕀𝕍𝔸𝔻𝔸 ━━━",
+                "│ 🍑 *€viewonce* — Revela view once",
+                "│ 🥹 *€salvar* — Guarda mídia citada",
+                "",
+                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝕃 ━━━",
+                "│ 🤖 *€ia [pergunta]* — Pergunta à IA",
+                "│ 😇 *€ia auto* — Liga IA automática",
+                "│ 🛑 *€ia desligar* — Desliga a IA",
+                "",
+                "━━━ 🎵 𝔻𝕆𝕎ℕ𝕃𝕆𝔸𝔻𝕊 ━━━",
+                "│ 🎵 *€baixar música [nome]* — Baixa MP3",
+                "│ 🎬 *€baixar vídeo [nome]* — Baixa vídeo",
+                "│ 📷 *€baixar foto [nome]* — Busca foto",
+                "",
+                "━━━ 🎭 𝕄Í𝔻𝕀𝔸 / 𝔼𝔽𝔼𝕀𝕋𝕆𝕊 ━━━",
+                "│ 🎭 *€sticker* — Cria figurinhas",
+                "│ 🎙️ *€áudio [texto]* — Fala com voz",
+                "│ 😎 *€perfil @Pessoa* — Mostra perfil",
+                "",
+                "━━━ 🎮 𝕌𝕋𝕀𝕃𝕀𝕋Á𝕊 ━━━",
+                "│ 🎮 *€quiz* — Quiz interativo",
+                "│ 🧩 *€charada* — Jogo de charadas",
+                "│ 🌍 *€hora* — Hora em vários países",
+                "│ 🏓 *€ping* — Status e latência",
+                "│ 📋 *€menu* — Abre este menu",
+                "",
+                "╔══════════════════════════════════╗",
+                "║  ⚡ 🟢 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝕆ℕ𝕃𝕀ℕ𝔼 ⚡  ║",
+                "╚══════════════════════════════════╝"
             ].join("\n");
-            return sock.sendMessage(from, { text: menu }, { quoted: msg });
+            return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
         }
 
+        // 2. PING
         if (command === 'ping') {
-            return sock.sendMessage(from, { text: '🏓 Pong! Bot operacional.' }, { quoted: msg });
+            return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo, rápido e online.' }, { quoted: msg });
         }
-    });
-}
 
-// Inicia os serviços em paralelo
-startWhatsAppBot();
-startTelegramPoller();
+        // 3. HORA
+        if (command === 'hora') {
+            const dataHora = new Date().toLocaleString('pt-PT', { timeZone: 'Africa/Maputo' });
+            return sock.sendMessage(from, { text: `🌍 Hora atual em Moçambique: *${dataHora}*` }, { quoted: msg });
+        }
+
+        // 4. QUIZ
+        if (command === 'quiz') {
+            const randomQuiz = quizDatabase[Math.floor(Math.random() * quizDatabase.length)];
+            activeQuiz[from] = randomQuiz;
+            return sock.sendMessage(from, { text: `🎮 *QUIZ MENTEMALUCA*\n\n❓ *Pergunta:* ${randomQuiz.pergunta}\n\n${randomQuiz.opcoes}\n\n👉 *Responda apenas com a letra (A, B, C ou D)!*` }, { quoted: msg });
+        }
+
+        // 5. CHARADAS
+        if (command === 'charada') {
+            const r = charadasDatabase[Math.floor(Math.random() * charadasDatabase.length)];
+            activeCharadas[from] = r.resposta;
+            return sock.sendMessage(from, { text: `🧩 *CHARADA*\n\n❓ ${r.pergunta}\n\n👉 Envie a resposta no chat!` }, { quoted: msg });
+        }
+
+        // 6. INTELIGÊNCIA ARTIFICIAL (IA)
+        if (command === 'ia') {
+            const pergunta = args.join(' ');
+            if (!pergunta) return sock.sendMessage(from, { text: '❌ Faça uma pergunta: €ia <texto>' }, { quoted: msg });
+            try {
+                const response = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(pergunta)}&format=json`);
+                const respostaIA = response.data.AbstractText || "Percebi a sua questão. Estou online para o ajudar.";
+                return sock.sendMessage(from, { text: `🤖 *IA:* ${respostaIA}` }, { quoted: msg });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ Erro ao consultar a IA.' }, { quoted: msg });
+            }
+        }
+
+        if (command === 'ia' && args[0] === 'auto') {
+            aiAutoGroups.add(from);
+            return sock.sendMessage(from, { text: '😇 IA Automática ligada neste chat!' }, { quoted: msg });
+        }
+
+        if (command === 'ia' && args[0] === 'desligar') {
+            aiAutoGroups.delete(from);
+            return sock.sendMessage(from, { text: '🛑 IA Automática desligada!' }, { quoted: msg });
+        }
+
+        // 7. FUNÇÕES DE DONO / GRUPO (NUKE, BAN, SILENCIAR, ABRIR, FECHAR, PROMOVER, REBAIXAR)
+        if (command === 'nuke') {
+            if (!isGroup || !isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar em grupos!' }, { quoted: msg });
+            try {
+                const meta = await sock.groupMetadata(from);
+                const targets = meta.participants.filter(p => !p.admin && !p.id.includes(OWNER_NUMBER)).map(p => p.id);
+                for (let t of targets) {
+                    await sock.groupParticipantsUpdate(from, [t], 'remove');
+                    await delay(1000);
+                }
+                return sock.sendMessage(from, { text: '💥 Nuke concluído!' });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ O bot precisa de ser Administrador.' });
+            }
+        }
+
+        if (command === 'ban') {
+            if (!isGroup || !isOwner) return;
+            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (mentioned.length > 0) {
+                await sock.groupParticipantsUpdate(from, mentioned, 'remove');
+                return sock.sendMessage(from, { text: '🚫 Membro banido com sucesso!' }, { quoted: msg });
+            }
+        }
+
+        if (command === 'silenciar') {
+            if (!isGroup || !isOwner) return;
+            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (mentioned.length > 0) {
+                mutedUsers.add(mentioned[0].replace(/[^0-9]/g, ''));
+                return sock.sendMessage(from, { text: '🔇 Membro silenciado!' }, { quoted: msg });
+            }
+        }
+
+        if (command === 'dessilenciar') {
+            if (!isGroup || !isOwner) return;
+            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (mentioned.length > 0) {
+                mutedUsers.delete(mentioned[0].replace(/[^0-9]/g, ''));
+                return sock.sendMessage(from, { text: '🔉 Membro dessilenciado!' }, { quoted: msg });
+            }
+        }
+
+        if (command === 'abrir' && isGroup && isOwner) {
+            await sock.groupSettingUpdate(from, 'not_announcement');
+            return sock.sendMessage(from, { text: '🔓 Grupo aberto!' }, { quoted: msg });
+        }
+
+        if (command === 'fechar' && isGroup && isOwner) {
+            await sock.groupSettingUpdate(from, 'announcement');
+            return sock.sendMessage(from, { text: '🔒 Grupo fechado!' }, { quoted: msg });
+        }
+
+        if (command === 'promover' && isGroup && isOwner) {
+            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (mentioned.length > 0) {
+                await sock.groupParticipantsUpdate(from, mentioned, 'promote');
+                return sock.sendMessage(from, { text: '⭐ Membro promovido a admin!' }, { quoted: msg });
+            }
+        }
+
+        if (command === 'rebaixar' && isGroup && isOwner) {
+            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (mentioned.length > 0) {
+                await sock.groupParticipantsUpdate(from, mentioned, 'demote');
+                return sock.sendMessage(from, { text: '⬇️ Membro rebaixado!' }, { quoted: msg });
+            }
+        }
+
+        if (command === 'link') {
+            if (!isGroup) return;
+            try {
+                const code = await sock.groupInviteCode(from);
+                return sock.sendMessage(from, { text: `🔗 https://chat.whatsapp.com/${code}` }, { quoted: msg });
+            } catch (e) {}
+        }
+
+        // 8. MÍDIA PRIVADA / SALVAR / VIEWONCE
+        if (command === 'salvar' || command === 'viewonce') {
+            const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+            if (!quoted) return sock.sendMessage(from, { text: '❌ Marque uma imagem ou vídeo viewonce/mídia!' }, { quoted: msg });
+            try {
+                const mediaMsg = quoted.imageMessage || quoted.videoMessage || quoted.audioMessage;
+                if (!mediaMsg) return sock.sendMessage(from, { text: '❌ A mensagem citada não contém mídia.' }, { quoted: msg });
+                
+                const buffer = await downloadMediaMessage({ message: quoted }, 'buffer', {});
+                const tipo = quoted.imageMessage ? 'image' : quoted.videoMessage ? 'video' : 'audio';
+                
+                if (tipo === 'image') {
+                    await sock.sendMessage(from, { image: buffer, caption: '✅ Mídia recuperada com sucesso!' });
+                } else if (tipo === 'video') {
+                    await sock.sendMessage(from, { video: buffer, caption: '✅ Mídia recuperada com sucesso!' });
+                }
+            } catch (err) {
+                return sock.sendMessage(from, { text: '❌ Erro ao descarregar a mídia.' }, { quoted: msg });
+            }
+        }
+
+        // 9. ÁUDIO TTS

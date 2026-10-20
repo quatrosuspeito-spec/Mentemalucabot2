@@ -108,7 +108,7 @@ async function startBot() {
             return sock.sendMessage(from, { text: '🟢 Status: *Online Pro*' });
         }
 
-          if (command === 'menu') {
+            if (command === 'menu') {
     const agora = new Date();
     const dataFormatada = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' });
     const horaFormatada = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -154,7 +154,7 @@ async function startBot() {
 ━━━ 🎵 𝔻𝕆𝕎ℕ𝕃𝕆𝔸𝔻𝕊 ━━━
 │ 🎵 *€baixar música [nome]* — 𝑩𝒂𝒊𝒙𝒂 𝑴𝑷𝟑 𝒄𝒐𝒎𝒑𝒍𝒆𝒕𝒂 𝒔ó 𝒑𝒐𝒓 𝒏𝒐𝒎𝒆
 │ 🎬 *€baixar vídeo [nome]* — 𝑩𝒂𝒊𝒙𝒂 𝒗í𝒅𝒆𝒐 𝒅𝒆 𝒀𝒐𝒖𝑻𝒖𝒃𝒆 𝒔ó 𝒑𝒐𝒓 𝒏𝒐𝒎𝒆
-│ 📷 *€baixar foto [nome]* — 𝑩𝒖𝒔𝒄𝒂 𝒇𝒐𝒕𝒐 𝒓𝒆𝒂𝒍 𝒅𝒆 𝒑𝒆𝒔𝒔𝒐𝒂𝒔/𝒄𝒐𝒊𝒔𝒂𝒔
+│ 📷 *€baixar foto [nome]* — 𝑩𝒖𝒔𝒄𝒂 𝒇𝒐𝒕𝒐 𝒓𝒆𝒂𝒍 𝑑𝑒 𝑝𝑒𝑠𝑠𝑜𝑎𝑠/𝑐𝑜𝑖𝑠𝑎𝑠
 │ ⚡ Atalhos: *€foto [nome]* e *€vídeo [nome]*
 
 ━━━ 🎭 𝕄Í𝔻𝕀𝔸 / 𝔼𝔽𝔼𝕀𝕋𝕆𝕊 ━━━
@@ -172,15 +172,16 @@ async function startBot() {
 │ 🛑 *€quiz parar* — termina o quiz e mostra o placar
 │ 🤪 *€online* — 𝐿𝑖𝑠𝑡𝑎 𝑞𝑢𝑒𝑚 𝑒𝑠𝑡á 𝑜𝑛𝑙𝑖𝑛𝑒 𝑒 𝑞𝑢𝑒𝑚 𝑛ã𝑜 𝑒𝑠𝑡á 𝑑𝑖𝑠𝑝𝑜𝑛í𝑣𝑒𝑙 𝑛𝑜 𝑔𝑟𝑢𝑝𝑜
 │ 🤪 *€status @pessoa* — 𝑒𝑥𝑝𝑙𝑖𝑐𝑎 𝑎𝑙𝑡𝑒𝑟𝑛𝑎𝑡𝑖𝑣𝑎𝑠; não controla chamadas
-│ 🌍 *€hora* — 𝐻𝑜𝑟𝑎 𝑒𝑚 12 𝑝𝑎í𝑠𝑒𝑠 𝑒𝑚 𝑡𝑒𝑚𝑝𝑜 𝑟𝑒𝑎𝑙
+│ 🌍 *€hora* — 𝐻𝑜𝑟𝑎 𝑒𝑚 12 𝑝𝑎í𝑠𝑒𝑠 𝑒𝑚 𝑡𝑒𝑚𝑝𝑜 𝑟𝑒𝒂𝑙
 │ 🏓 *€ping* — 𝑆𝑡𝑎𝑡𝑢𝑠 𝑒 𝑙𝑎𝑡ê𝑛𝑐𝑖𝑎 𝑑𝑜 𝑏𝑜𝑡
 │ 📋 *€menu* — 𝐴𝑏𝑟𝑒 𝑒𝑠𝑡𝑒 𝑚𝑒𝑛𝑢
-           €trava crash 258 €trava grupo €flood 258
+
 ╔══════════════════════════════════╗
 ║  ⚡ 🟢 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝕆ℕ𝕃𝕀ℕ𝔼 ⚡  ║
 ╚══════════════════════════════════╝`;
 
     return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
   }
+
 
 startBot();

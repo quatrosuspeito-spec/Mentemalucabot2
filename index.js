@@ -99,15 +99,12 @@ async function startBot() {
                      msg.message.imageMessage?.caption ||
                      msg.message.videoMessage?.caption || '';
 
-        if (!body.startsWith(PREFIX) && !body.startsWith('@')) return;
+        if (!body.startsWith(PREFIX)) return;
 
         const args = body.slice(PREFIX.length).trim().split(/ +/);
         const command = args.shift()?.toLowerCase();
 
-        if (command === 'ping') {
-            return sock.sendMessage(from, { text: '🟢 Status: *Online Pro*' });
-        }
-
+        // 1. MENU
         if (command === 'menu') {
             const menuTexto = [
                 "╔══════════════════════════════════╗",
@@ -166,6 +163,114 @@ async function startBot() {
             ].join("\n");
 
             return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
+        }
+
+        // 2. PING
+        if (command === 'ping') {
+            return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo e online.' }, { quoted: msg });
+        }
+
+        // 3. ABRIR / FECHAR GRUPO
+        if (command === 'abrir') {
+            if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
+            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar este comando!' }, { quoted: msg });
+            try {
+                await sock.groupSettingUpdate(from, 'not_announcement');
+                return sock.sendMessage(from, { text: '🔓 Grupo aberto! Todos os membros já podem enviar mensagens.' }, { quoted: msg });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ Erro ao abrir o grupo. O bot precisa de ser Administrador.' }, { quoted: msg });
+            }
+        }
+
+        if (command === 'fechar') {
+            if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
+            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar este comando!' }, { quoted: msg });
+            try {
+                await sock.groupSettingUpdate(from, 'announcement');
+                return sock.sendMessage(from, { text: '🔒 Grupo fechado! Agora apenas os administradores podem enviar mensagens.' }, { quoted: msg });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ Erro ao fechar o grupo. O bot precisa de ser Administrador.' }, { quoted: msg });
+            }
+        }
+
+        // 4. LINK DO GRUPO
+        if (command === 'link') {
+            if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
+            try {
+                const code = await sock.groupInviteCode(from);
+                return sock.sendMessage(from, { text: `🔗 Link de convite do grupo:\nhttps://chat.whatsapp.com/${code}` }, { quoted: msg });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ Erro ao obter o link. O bot precisa de ser Administrador.' }, { quoted: msg });
+            }
+        }
+
+        // 5. BAN / REMOVER MEMBRO
+        if (command === 'ban' || command === 'nuke') {
+            if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
+            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar este comando!' }, { quoted: msg });
+            
+            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (mentioned.length === 0) {
+                return sock.sendMessage(from, { text: '❌ Marque o usuário que deseja banir com @ (ex: €ban @número)' }, { quoted: msg });
+            }
+
+            try {
+                await sock.groupParticipantsUpdate(from, mentioned, 'remove');
+                return sock.sendMessage(from, { text: '✅ Membro(s) removido(s) com sucesso!' }, { quoted: msg });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ Erro ao remover. Certifique-se de que o bot é Administrador.' }, { quoted: msg });
+            }
+        }
+
+        // 6. PROMOVER / REBAIXAR ADMIN
+        if (command === 'promover') {
+            if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
+            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar este comando!' }, { quoted: msg });
+            
+            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (mentioned.length === 0) return sock.sendMessage(from, { text: '❌ Marque o membro a promover.' }, { quoted: msg });
+
+            try {
+                await sock.groupParticipantsUpdate(from, mentioned, 'promote');
+                return sock.sendMessage(from, { text: '⭐ Membro promovido a administrador!' }, { quoted: msg });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ Erro ao promover. O bot precisa de ser Administrador.' }, { quoted: msg });
+            }
+        }
+
+        if (command === 'rebaixar') {
+            if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
+            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar este comando!' }, { quoted: msg });
+            
+            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            if (mentioned.length === 0) return sock.sendMessage(from, { text: '❌ Marque o administrador a rebaixar.' }, { quoted: msg });
+
+            try {
+                await sock.groupParticipantsUpdate(from, mentioned, 'demote');
+                return sock.sendMessage(from, { text: '⬇️ Administrador rebaixado a membro comum!' }, { quoted: msg });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ Erro ao rebaixar.' }, { quoted: msg });
+            }
+        }
+
+        // 7. HORA ATUAL
+        if (command === 'hora') {
+            const dataHora = new Date().toLocaleString('pt-PT', { timeZone: 'Africa/Maputo' });
+            return sock.sendMessage(from, { text: `🌍 Hora atual em Moçambique: *${dataHora}*` }, { quoted: msg });
+        }
+
+        // 8. IA SIMPLES
+        if (command === 'ia') {
+            const pergunta = args.join(' ');
+            if (!pergunta) return sock.sendMessage(from, { text: '❌ Escreva uma pergunta após o comando. Exemplo: *€ia como estás?*' }, { quoted: msg });
+            
+            try {
+                const response = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(pergunta)}&format=json`);
+                const respostaIA = response.data.AbstractText || "Não consegui encontrar uma resposta exata para isso agora.";
+                return sock.sendMessage(from, { text: `🤖 *IA:* ${respostaIA}` }, { quoted: msg });
+            } catch (e) {
+                return sock.sendMessage(from, { text: '❌ Erro ao consultar a IA.' }, { quoted: msg });
+            }
         }
     });
 }

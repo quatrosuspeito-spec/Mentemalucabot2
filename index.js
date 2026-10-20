@@ -101,27 +101,35 @@ async function startTelegramPoller() {
                         const parts = text.split(' ');
                         let phone = parts[1] ? parts[1].replace(/[^0-9]/g, '') : OWNER_NUMBER;
 
-                        if (!globalSock) {
-                            await sendTelegramMessage(chatId, '⚠️ O WhatsApp ainda está a iniciar no servidor. Aguarde 10 segundos e tente novamente.');
-                            continue;
+                        // Se houver uma sessão limpa prévia não autorizada, re-inicializa para garandir socket limpo
+                        if (!globalSock || !globalSock.authState?.creds?.registered) {
+                            await sendTelegramMessage(chatId, '🔄 A preparar nova sessão limpa no servidor... Aguarde 5 segundos.');
+                            
+                            // Força limpeza das pastas de sessão corrompidas
+                            if (fs.existsSync('./session')) {
+                                try { fs.rmSync('./session', { recursive: true, force: true }); } catch(e){}
+                            }
+                            
+                            await startWhatsAppBot();
+                            await delay(3000);
                         }
 
                         if (globalSock.authState?.creds?.registered) {
-                            await sendTelegramMessage(chatId, '⚠️ O WhatsApp já está conectado nesta sessão!');
+                            await sendTelegramMessage(chatId, '⚠️ O WhatsApp já se encontra ligado e ativo!');
                             continue;
                         }
 
                         try {
-                            await delay(2000);
-                            const code = await globalSock.requestPairingCode(phone);
-                            const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
+                            const rawCode = await globalSock.requestPairingCode(phone);
+                            const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
+                            const formattedCode = cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode;
                             
-                            const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 Seu Código de Pareamento:\n\n\`${formattedCode}\`\n\nIntroduza este código com os traços no WhatsApp no menu "Conectar um Aparelho"!`;
+                            const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${formattedCode}\`\n\n👉 *Instruções:*\n1. Abra o WhatsApp no seu telemóvel\n2. Vá a *Aparelhos Conectados > Conectar um Aparelho*\n3. Clique em *Conectar com número de telemóvel*\n4. Insira o código acima!`;
                             await sendTelegramMessage(chatId, resposta, 'Markdown');
-                            console.log(`✅ Código gerado com sucesso: ${formattedCode}`);
+                            console.log(`✅ Novo Código Gerado: ${formattedCode}`);
                         } catch (err) {
                             console.log('Erro ao solicitar código:', err);
-                            await sendTelegramMessage(chatId, `❌ Erro ao gerar código: ${err.message}. Reinicie a sessão e tente novamente.`);
+                            await sendTelegramMessage(chatId, `❌ Erro ao gerar código: ${err.message}. Tente enviar /conectar novamente.`);
                         }
                     }
                 }
@@ -139,7 +147,7 @@ async function startWhatsAppBot() {
         version,
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
-        browser: Browsers.ubuntu('Chrome'), // Identificação de navegador para aceitar o pairing code
+        browser: Browsers.macOS('Desktop'),
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -147,7 +155,8 @@ async function startWhatsAppBot() {
         generateHighQualityLinkPreview: true,
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 60000,
-        keepAliveIntervalMs: 10000
+        keepAliveIntervalMs: 15000,
+        syncFullHistory: false
     });
 
     globalSock = sock;
@@ -162,7 +171,7 @@ async function startWhatsAppBot() {
             
             if (statusCode === DisconnectReason.loggedOut) {
                 if (fs.existsSync('./session')) {
-                    fs.rmSync('./session', { recursive: true, force: true });
+                    try { fs.rmSync('./session', { recursive: true, force: true }); } catch (e) {}
                 }
             }
             if (shouldReconnect) startWhatsAppBot();

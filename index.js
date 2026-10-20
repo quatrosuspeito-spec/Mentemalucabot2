@@ -26,14 +26,12 @@ const quizDatabase = [
 ];
 let activeQuiz = {};
 
-let tgBot = null;
-try {
-    tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
-    console.log('🤖 Telegram Bot ativado com sucesso!');
-    tgBot.on('polling_error', () => {});
-} catch (e) {
-    console.log('⚠️ Erro no Telegram:', e.message);
-}
+const tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+console.log('🤖 Telegram Bot ativado com sucesso!');
+
+tgBot.on('polling_error', (err) => {
+    // Ignora erros menores de polling para manter a estabilidade
+});
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('./session');
@@ -52,24 +50,28 @@ async function startBot() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    if (tgBot) {
-        tgBot.removeAllListeners('text');
-        tgBot.onText(/\/conectar (.+)/, async (msg, match) => {
-            const chatId = msg.chat.id;
-            let phone = match[1].replace(/[^0-9]/g, '');
-            if (!phone) return tgBot.sendMessage(chatId, '❌ Use: /conectar 258856868102');
+    // Ouvinte universal de comandos no Telegram
+    tgBot.on('message', async (msg) => {
+        const chatId = msg.chat.id;
+        const text = (msg.text || '').trim();
+
+        if (text.startsWith('/conectar') || text.startsWith('/start')) {
+            const parts = text.split(' ');
+            let phone = parts[1] ? parts[1].replace(/[^0-9]/g, '') : '258856868102';
+            
             try {
                 if (sock.authState?.creds?.registered) {
-                    return tgBot.sendMessage(chatId, '⚠️ O WhatsApp já está conectado!');
+                    return tgBot.sendMessage(chatId, '⚠️ O WhatsApp já está conectado nesta sessão!');
                 }
-                await delay(2000);
+
+                await delay(1000);
                 const code = await sock.requestPairingCode(phone);
-                tgBot.sendMessage(chatId, `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 Código de Pareamento:\n\n\`${code}\`\n\nIntroduza no WhatsApp!`, { parse_mode: 'Markdown' });
+                tgBot.sendMessage(chatId, `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 Seu Código de Pareamento:\n\n\`${code}\`\n\nIntroduza este código no seu WhatsApp imediatamente!`, { parse_mode: 'Markdown' });
             } catch (err) {
-                tgBot.sendMessage(chatId, `❌ Erro: ${err.message}`);
+                tgBot.sendMessage(chatId, `❌ Erro ao gerar código: ${err.message}`);
             }
-        });
-    }
+        }
+    });
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;

@@ -21,12 +21,24 @@ const {
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
+const https = require('https');
 require('dotenv').config();
 
 const PREFIX = process.env.BOT_PREFIX || '€';
 const OWNER_NUMBER = '258856868102';
-// TOKEN CORRIGIDO CONFORME A IMAGEM DO BOTFATHER:
 const TELEGRAM_TOKEN = '8892332641:AAFL7pp9MIeGgo6ztp2tuT1l4WuovcSX6Ec';
+
+// Forçar conexões IPv4 e com Retry para evitar ETIMEDOUT no Render
+const httpsAgent = new https.Agent({
+    family: 4,
+    keepAlive: true,
+    timeout: 10000
+});
+
+const tgAxios = axios.create({
+    httpsAgent,
+    timeout: 10000
+});
 
 let globalSock = null;
 let lastUpdateId = 0;
@@ -50,7 +62,7 @@ const charadasDatabase = [
 /* STREAMING_CHUNK:Defining Telegram messaging helpers */
 async function sendTelegramMessage(chatId, text, parseMode = '') {
     try {
-        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
             chat_id: chatId,
             text: text,
             parse_mode: parseMode
@@ -62,18 +74,18 @@ async function sendTelegramMessage(chatId, text, parseMode = '') {
 
 /* STREAMING_CHUNK:Initializing Telegram Poller */
 async function startTelegramPoller() {
-    console.log('🤖 A iniciar ligação ao Telegram...');
+    console.log('🤖 A iniciar ligação ao Telegram (IPv4)...');
     
     try {
-        await axios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
+        await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
         console.log('✅ Webhooks antigos eliminados e token verificado!');
     } catch (e) {
-        console.log('❌ Erro de validação do token do Telegram:', e.response?.data || e.message);
+        console.log('⚠️ Tentando reconectar Telegram:', e.message);
     }
 
     setInterval(async () => {
         try {
-            const res = await axios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`, {
+            const res = await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`, {
                 params: { offset: lastUpdateId + 1, timeout: 5 }
             });
 
@@ -114,7 +126,7 @@ async function startTelegramPoller() {
                 }
             }
         } catch (err) {}
-    }, 1500);
+    }, 2000);
 }
 
 /* STREAMING_CHUNK:Initializing WhatsApp Socket Handler */
@@ -335,7 +347,7 @@ async function startWhatsAppBot() {
             const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
             if (mentioned.length > 0) {
                 mutedUsers.delete(mentioned[0].replace(/[^0-9]/g, ''));
-                return sock.sendMessage(from, { text: 'JB Membro dessilenciado!' }, { quoted: msg });
+                return sock.sendMessage(from, { text: '🔉 Membro dessilenciado!' }, { quoted: msg });
             }
         }
 

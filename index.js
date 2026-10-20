@@ -17,7 +17,8 @@ const {
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
     delay,
-    downloadMediaMessage
+    downloadMediaMessage,
+    Browsers
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
@@ -72,68 +73,6 @@ async function sendTelegramMessage(chatId, text, parseMode = '') {
     }
 }
 
-/* STREAMING_CHUNK:Initializing Telegram Poller */
-async function startTelegramPoller() {
-    console.log('🤖 A iniciar ligação ao Telegram...');
-    
-    try {
-        await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
-    } catch (e) {}
-
-    setInterval(async () => {
-        try {
-            const res = await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`, {
-                params: { offset: lastUpdateId + 1, timeout: 5 }
-            });
-
-            if (res.data && res.data.ok && res.data.result.length > 0) {
-                for (let update of res.data.result) {
-                    lastUpdateId = update.update_id;
-                    const msg = update.message;
-                    if (!msg || !msg.text) continue;
-
-                    const chatId = msg.chat.id;
-                    const text = msg.text.trim();
-                    console.log(`📩 Comando Telegram recebido: ${text}`);
-
-                    if (text.startsWith('/conectar') || text.startsWith('/start')) {
-                        const parts = text.split(' ');
-                        let phone = parts[1] ? parts[1].replace(/[^0-9]/g, '') : DEFAULT_OWNER;
-
-                        if (!phone || phone.length < 8) {
-                            await sendTelegramMessage(chatId, '❌ Por favor introduza um número válido com o código do país!\nExemplo: `/conectar 258841234567`', 'Markdown');
-                            continue;
-                        }
-
-                        // Forçar reinicialização limpa
-                        await sendTelegramMessage(chatId, `🔄 A preparar o bot para o número +${phone}... Aguarde 5 segundos.`);
-                        
-                        if (fs.existsSync('./session')) {
-                            try { fs.rmSync('./session', { recursive: true, force: true }); } catch(e){}
-                        }
-                        
-                        await startWhatsAppBot();
-                        await delay(3000);
-
-                        try {
-                            const rawCode = await globalSock.requestPairingCode(phone);
-                            const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
-                            const formattedCode = cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode;
-                            
-                            const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número Solicitado: +${phone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${formattedCode}\`\n\n👉 *No WhatsApp de (+${phone}):*\n1. Vá em *Aparelhos Conectados > Conectar um Aparelho*\n2. Clique em *Conectar com número de telemóvel*\n3. Introduza o código acima!`;
-                            await sendTelegramMessage(chatId, resposta, 'Markdown');
-                            console.log(`✅ Novo Código Gerado para ${phone}: ${formattedCode}`);
-                        } catch (err) {
-                            console.log('Erro ao solicitar código:', err);
-                            await sendTelegramMessage(chatId, `❌ Erro do WhatsApp ao gerar código: ${err.message}. Tente novamente.`);
-                        }
-                    }
-                }
-            }
-        } catch (err) {}
-    }, 2000);
-}
-
 /* STREAMING_CHUNK:Initializing WhatsApp Socket Handler */
 async function startWhatsAppBot() {
     const { state, saveCreds } = await useMultiFileAuthState('./session');
@@ -143,7 +82,7 @@ async function startWhatsAppBot() {
         version,
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
-        browser: ["Ubuntu", "Chrome", "20.0.00"], // Parâmetro oficial testado que evita rejeição de código
+        browser: Browsers.ubuntu('Chrome'), // Formato oficial compativel para pairing code
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -158,7 +97,7 @@ async function startWhatsAppBot() {
     globalSock = sock;
     sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', (update) => {
+    sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
@@ -420,6 +359,71 @@ async function startWhatsAppBot() {
             }
         }
     });
+}
+
+/* STREAMING_CHUNK:Initializing Telegram Poller */
+async function startTelegramPoller() {
+    console.log('🤖 A iniciar ligação ao Telegram...');
+    
+    try {
+        await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
+    } catch (e) {}
+
+    setInterval(async () => {
+        try {
+            const res = await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`, {
+                params: { offset: lastUpdateId + 1, timeout: 5 }
+            });
+
+            if (res.data && res.data.ok && res.data.result.length > 0) {
+                for (let update of res.data.result) {
+                    lastUpdateId = update.update_id;
+                    const msg = update.message;
+                    if (!msg || !msg.text) continue;
+
+                    const chatId = msg.chat.id;
+                    const text = msg.text.trim();
+                    console.log(`📩 Comando Telegram recebido: ${text}`);
+
+                    if (text.startsWith('/conectar') || text.startsWith('/start')) {
+                        const parts = text.split(' ');
+                        let phone = parts[1] ? parts[1].replace(/[^0-9]/g, '') : DEFAULT_OWNER;
+
+                        if (!phone || phone.length < 8) {
+                            await sendTelegramMessage(chatId, '❌ Número inválido!\nExemplo: `/conectar 258841234567`', 'Markdown');
+                            continue;
+                        }
+
+                        await sendTelegramMessage(chatId, `🔄 A limpar sessão anterior e ligar servidor para +${phone}... Aguarde 6 segundos.`);
+                        
+                        // Elimina sessões residuais que causam rejeição do WhatsApp
+                        if (fs.existsSync('./session')) {
+                            try { fs.rmSync('./session', { recursive: true, force: true }); } catch(e){}
+                        }
+                        
+                        await startWhatsAppBot();
+                        
+                        // Tempo necessário para estabilizar os websockets
+                        await delay(6000);
+
+                        try {
+                            if (!globalSock) throw new Error("Socket não inicializado.");
+                            const rawCode = await globalSock.requestPairingCode(phone);
+                            const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
+                            const formattedCode = cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode;
+                            
+                            const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${formattedCode}\`\n\n👉 *Instruções no WhatsApp de (+${phone}):*\n1. Vá a *Aparelhos Conectados > Conectar um Aparelho*\n2. Escolha *Conectar com número de telemóvel*\n3. Introduza este código imediatamente!`;
+                            await sendTelegramMessage(chatId, resposta, 'Markdown');
+                            console.log(`✅ Novo Código Gerado para ${phone}: ${formattedCode}`);
+                        } catch (err) {
+                            console.log('Erro ao solicitar código:', err);
+                            await sendTelegramMessage(chatId, `❌ Erro do WhatsApp: ${err.message}. Envie o comando novamente.`);
+                        }
+                    }
+                }
+            }
+        } catch (err) {}
+    }, 2000);
 }
 
 /* STREAMING_CHUNK:Bootstrapping Application */

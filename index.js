@@ -109,54 +109,65 @@ async function startBot() {
         }
 
         if (command === 'menu') {
-  const menuTexto = "╔══════════════════════════════════╗\n" +
-                    "║  🔮 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝔹𝕆𝕋 🔮  ║\n" +
-                    "║       ✦ 𝑏𝑜𝑡 𝑑𝑜 𝑑𝑜𝑛𝑜 ✦       ║\n" +
-                    "╠══════════════════════════════════╣\n" +
-                    "╚══════════════════════════════════╝\n\n" +
-                    "𝕀ℕ𝔽𝕆ℝ𝕄𝔸Ç𝔸̃𝕆 𝔾𝔼ℝ𝔸𝕃\n" +
-                    "  🟢 Status: *Online*\n" +
-                    "  👑 Dono: *+258856868102*\n" +
-                    "  🤖 Versão: *2.0 Pro*\n" +
-                    "  🔑 Prefixo: *€*\n\n" +
-                    "━━━ 👑 𝔽𝕌ℕÇ𝕆̃𝔼𝕊 𝔻𝕆 𝔻𝕆ℕ𝕆 (só dono) ━━━\n" +
-                    "│ 💣 *€nuke* — Remove todos os membros\n" +
-                    "│ 🔇 *€silenciar @num* — Silencia um membro\n" +
-                    "│ 🔉 *€dessilenciar @num* — Dessilencia o membro\n" +
-                    "│ 🔓 *€abrir* — Abre o grupo para todos\n" +
-                    "│ 🔒 *€fechar* — Fecha o grupo (só admins)\n" +
-                    "│ ⭐ *€promover @num* — Promove a admin\n" +
-                    "│ ⬇️ *€rebaixar @num* — Remove admin\n" +
-                    "│ 🚫 *€ban @num* — Banir membro do grupo\n" +
-                    "│ 🔗 *€link* — Obtém link de convite\n" +
-                    "│ 🧹 *€limpar* — Limpa o chat atual\n\n" +
-                    "━━━ 🍑 𝕄Í𝔻𝕀𝔸 𝙋ℝ𝕀𝕍𝔸𝔻𝔸 ━━━\n" +
-                    "│ 🍑 *€viewonce* — Revela view once\n" +
-                    "│ 🥹 *€salvar* — Guarda mídia citada\n\n" +
-                    "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝕃 ━━━\n" +
-                    "│ 🤖 *€ia [pergunta]* — Pergunta à IA\n" +
-                    "│ 😇 *€ia auto* — Liga IA automática\n" +
-                    "│ 🛑 *€ia desligar* — Desliga a IA\n\n" +
-                    "━━━ 🎵 𝔻𝕆𝕎ℕ𝕃𝕆𝔸𝔻𝕊 ━━━\n" +
-                    "│ 🎵 *€baixar música [nome]* — Baixa MP3\n" +
-                    "│ 🎬 *€baixar vídeo [nome]* — Baixa vídeo\n" +
-                    "│ 📷 *€baixar foto [nome]* — Busca foto\n\n" +
-                    "━━━ 🎭 𝕄Í𝔻𝕀𝔸 / 𝔼𝔽𝔼𝕀𝕋𝕆𝕊 ━━━\n" +
-                    "│ 🎭 *€sticker* — Cria figurinhas\n" +
-                    "│ 🎙️ *€áudio [texto]* — Fala com voz\n" +
-                    "│ 😎 *€perfil @Pessoa* — Mostra perfil\n\n" +
-                    "━━━ 🎮 𝕌𝕋𝕀𝕃𝕀𝕋Á𝕊 ━━━\n" +
-                    "│ 🎮 *€quiz* — Quiz interativo\n" +
-                    "│ 🧩 *€charada* — Jogo de charadas\n" +
-                    "│ 🌍 *€hora* — Hora em vários países\n" +
-                    "│ 🏓 *€ping* — Status e latência\n" +
-                    "│ 📋 *€menu* — Abre este menu\n\n" +
-                    "╔══════════════════════════════════╗\n" +
-                    "║  ⚡ 🟢 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝕆ℕ𝕃𝕀ℕ𝔼 ⚡  ║\n" +
-                    "╚══════════════════════════════════╝";
+  const menuTexto = [
+    "╔══════════════════════════════════╗",
+    "║  🔮 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝔹𝕆𝕋 🔮  ║",
+    "║       ✦ 𝑏𝑜𝑡 𝑑𝑜 𝑑𝑜𝑛𝑜 ✦       ║",
+    "╠══════════════════════════════════╣",
+    "╚══════════════════════════════════╝",
+    "",
+    "𝕀ℕ𝔽𝕆ℝ𝕄𝔸Ç𝔸̃𝕆 𝔾𝔼ℝ𝔸𝕃",
+    "  🟢 Status: *Online*",
+    "  👑 Dono: *+258856868102*",
+    "  🤖 Versão: *2.0 Pro*",
+    "  🔑 Prefixo: *€*",
+    "",
+    "━━━ 👑 𝔽𝕌ℕÇ𝕆̃𝔼𝕊 𝔻𝕆 𝔻𝕆ℕ𝕆 (só dono) ━━━",
+    "│ 💣 *€nuke* — Remove todos os membros",
+    "│ 🔇 *€silenciar @num* — Silencia um membro",
+    "│ 🔉 *€dessilenciar @num* — Dessilencia o membro",
+    "│ 🔓 *€abrir* — Abre o grupo para todos",
+    "│ 🔒 *€fechar* — Fecha o grupo (só admins)",
+    "│ ⭐ *€promover @num* — Promove a admin",
+    "│ ⬇️ *€rebaixar @num* — Remove admin",
+    "│ 🚫 *€ban @num* — Banir membro do grupo",
+    "│ 🔗 *€link* — Obtém link de convite",
+    "│ 🧹 *€limpar* — Limpa o chat atual",
+    "",
+    "━━━ 🍑 𝕄Í𝔻𝕀𝔸 𝙋ℝ𝕀𝕍𝔸𝔻𝔸 ━━━",
+    "│ 🍑 *€viewonce* — Revela view once",
+    "│ 🥹 *€salvar* — Guarda mídia citada",
+    "",
+    "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝕃 ━━━",
+    "│ 🤖 *€ia [pergunta]* — Pergunta à IA",
+    "│ 😇 *€ia auto* — Liga IA automática",
+    "│ 🛑 *€ia desligar* — Desliga a IA",
+    "",
+    "━━━ 🎵 𝔻𝕆𝕎ℕ𝕃𝕆𝔸𝔻𝕊 ━━━",
+    "│ 🎵 *€baixar música [nome]* — Baixa MP3",
+    "│ 🎬 *€baixar vídeo [nome]* — Baixa vídeo",
+    "│ 📷 *€baixar foto [nome]* — Busca foto",
+    "",
+    "━━━ 🎭 𝕄Í𝔻𝕀𝔸 / 𝔼𝔽𝔼𝕀𝕋𝕆𝕊 ━━━",
+    "│ 🎭 *€sticker* — Cria figurinhas",
+    "│ 🎙️ *€áudio [texto]* — Fala com voz",
+    "│ 😎 *€perfil @Pessoa* — Mostra perfil",
+    "",
+    "━━━ 🎮 𝕌𝕋𝕀𝕃𝕀𝕋Á𝕊 ━━━",
+    "│ 🎮 *€quiz* — Quiz interativo",
+    "│ 🧩 *€charada* — Jogo de charadas",
+    "│ 🌍 *€hora* — Hora em vários países",
+    "│ 🏓 *€ping* — Status e latência",
+    "│ 📋 *€menu* — Abre este menu",
+    "",
+    "╔══════════════════════════════════╗",
+    "║  ⚡ 🟢 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝕆ℕ𝕃𝕀ℕ𝔼 ⚡  ║",
+    "╚══════════════════════════════════╝"
+  ].join("\n");
 
   return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
 }
+
 
       
   

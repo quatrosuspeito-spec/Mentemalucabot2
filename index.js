@@ -16,7 +16,7 @@ require('dotenv').config();
 
 const PREFIX = process.env.BOT_PREFIX || '€';
 let OWNER_NUMBER = process.env.OWNER_NUMBER || '258856868102';
-const TELEGRAM_TOKEN = '8892332641:AAHv0nyJyd3lpTQ0OKMXLk7nl2YEBTlhm3U';
+const TELEGRAM_TOKEN = '8892332641:AAG2DP__BuXnXp9-XE50jWP0i8j4yGfyHEo';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 const mutedUsers = new Set();

@@ -26,9 +26,10 @@ require('dotenv').config();
 
 const PREFIX = process.env.BOT_PREFIX || '€';
 const OWNER_NUMBER = '258856868102';
-const TELEGRAM_TOKEN = '8892332641:AAFL7pp9MIeGgo6ztp2tuT1l4WuovcSX6Ec';
+// NOVO TOKEN GERADO PELO BOTFATHER:
+const TELEGRAM_TOKEN = '8892332641:AAEP0ZxoamGQsWGg4X-24P2K7c78WGZT-nY';
 
-// Forçar conexões IPv4 e com Retry para evitar ETIMEDOUT no Render
+// Agent HTTPS com IPv4 forçado para evitar erros no Render
 const httpsAgent = new https.Agent({
     family: 4,
     keepAlive: true,
@@ -74,13 +75,13 @@ async function sendTelegramMessage(chatId, text, parseMode = '') {
 
 /* STREAMING_CHUNK:Initializing Telegram Poller */
 async function startTelegramPoller() {
-    console.log('🤖 A iniciar ligação ao Telegram (IPv4)...');
+    console.log('🤖 A iniciar ligação ao Telegram com novo token...');
     
     try {
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
-        console.log('✅ Webhooks antigos eliminados e token verificado!');
+        console.log('✅ Webhooks antigos eliminados e novo token validado com sucesso!');
     } catch (e) {
-        console.log('⚠️ Tentando reconectar Telegram:', e.message);
+        console.log('⚠️ Tentando reconectar Telegram:', e.response?.data || e.message);
     }
 
     setInterval(async () => {

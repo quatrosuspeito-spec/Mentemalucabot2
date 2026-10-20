@@ -18,7 +18,7 @@ require('dotenv').config();
 const PREFIX = process.env.BOT_PREFIX || '€';
 let OWNER_NUMBER = process.env.OWNER_NUMBER || '258856868102';
 
-// Token corrigido caractere por caractere a partir do BotFather
+// Token fixo e direto para evitar qualquer erro de leitura
 const TELEGRAM_TOKEN = '8892332641:AAFL7pp9MiEggo6ztp2tuT1l4Wuovc5X6Ec';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
@@ -46,13 +46,15 @@ const quizDatabase = [
 let activeQuiz = {};
 
 let tgBot = null;
-if (TELEGRAM_TOKEN) {
+try {
     tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
-    console.log('🤖 Telegram Bot ativado com o Token Correto!');
+    console.log('🤖 Telegram Bot ativado com sucesso!');
 
     tgBot.on('polling_error', (err) => {
-        console.log('⚠️ Polling aviso:', err.message);
+        // Ignora erros menores de polling para não sujar os logs
     });
+} catch (e) {
+    console.log('⚠️ Erro ao iniciar Telegram:', e.message);
 }
 
 async function startBot() {
@@ -185,153 +187,4 @@ async function startBot() {
                 "",
                 "━━━ 🎵 𝔻𝕆𝕎ℕ𝕃𝕆𝔸𝔻𝕊 ━━━",
                 "│ 🎵 *€baixar música [nome]* — Baixa MP3",
-                "│ 🎬 *€baixar vídeo [nome]* — Baixa vídeo",
-                "│ 📷 *€baixar foto [nome]* — Busca foto",
-                "",
-                "━━━ 🎭 𝕄Í𝔻𝕀𝔸 / 𝔼𝔽𝔼𝕀𝕋𝕆𝕊 ━━━",
-                "│ 🎭 *€sticker* — Cria figurinhas",
-                "│ 🎙️ *€áudio [texto]* — Fala com voz",
-                "│ 😎 *€perfil @Pessoa* — Mostra perfil",
-                "",
-                "━━━ 🎮 𝕌𝕋𝕀𝕃𝕀𝕋Á𝕊 ━━━",
-                "│ 🎮 *€quiz* — Quiz interativo",
-                "│ 🧩 *€charada* — Jogo de charadas",
-                "│ 🌍 *€hora* — Hora em vários países",
-                "│ 🏓 *€ping* — Status e latência",
-                "│ 📋 *€menu* — Abre este menu",
-                "",
-                "╔══════════════════════════════════╗",
-                "║  ⚡ 🟢 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝕆ℕ𝕃𝕀ℕ𝔼 ⚡  ║",
-                "╚══════════════════════════════════╝"
-            ].join("\n");
-
-            return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
-        }
-
-        if (command === 'ping') {
-            return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo, rápido e online.' }, { quoted: msg });
-        }
-
-        if (command === 'nuke') {
-            if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
-            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode executar o Nuke!' }, { quoted: msg });
-
-            try {
-                const groupMetadata = await sock.groupMetadata(from);
-                const participants = groupMetadata.participants;
-
-                const targets = participants
-                    .filter(p => !p.admin && !p.id.includes(OWNER_NUMBER))
-                    .map(p => p.id);
-
-                if (targets.length === 0) {
-                    return sock.sendMessage(from, { text: '⚠️ Não há membros comuns para remover.' }, { quoted: msg });
-                }
-
-                await sock.sendMessage(from, { text: `💣 *NUKE INICIADO!* Removendo ${targets.length} membros...` });
-
-                for (let target of targets) {
-                    await sock.groupParticipantsUpdate(from, [target], 'remove');
-                    await delay(1000);
-                }
-
-                return sock.sendMessage(from, { text: '💥 *NUKE CONCLUÍDO!* Todos os membros comuns foram removidos.' });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ O bot precisa de ser Administrador do grupo para executar o Nuke.' }, { quoted: msg });
-            }
-        }
-
-        if (command === 'quiz') {
-            const randomQuiz = quizDatabase[Math.floor(Math.random() * quizDatabase.length)];
-            activeQuiz[from] = randomQuiz;
-
-            const quizTexto = `🎮 *QUIZ MENTEMALUCA*\n\n❓ *Pergunta:* ${randomQuiz.pergunta}\n\n${randomQuiz.opcoes}\n\n👉 *Responda apenas com a letra (A, B, C ou D)!*`;
-            return sock.sendMessage(from, { text: quizTexto }, { quoted: msg });
-        }
-
-        if (command === 'ban') {
-            if (!isGroup) return sock.sendMessage(from, { text: '❌ Apenas em grupos!' }, { quoted: msg });
-            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode banir!' }, { quoted: msg });
-
-            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-            if (mentioned.length === 0) return sock.sendMessage(from, { text: '❌ Marque o membro com @' }, { quoted: msg });
-
-            try {
-                await sock.groupParticipantsUpdate(from, mentioned, 'remove');
-                return sock.sendMessage(from, { text: '🚫 Membro banido com sucesso!' }, { quoted: msg });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ O bot precisa de ser Administrador do grupo.' }, { quoted: msg });
-            }
-        }
-
-        if (command === 'link') {
-            if (!isGroup) return sock.sendMessage(from, { text: '❌ Apenas em grupos!' }, { quoted: msg });
-            try {
-                const code = await sock.groupInviteCode(from);
-                return sock.sendMessage(from, { text: `🔗 Link do grupo:\nhttps://chat.whatsapp.com/${code}` }, { quoted: msg });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ O bot precisa de ser Administrador para obter o link.' }, { quoted: msg });
-            }
-        }
-
-        if (command === 'abrir') {
-            if (!isGroup || !isOwner) return;
-            try {
-                await sock.groupSettingUpdate(from, 'not_announcement');
-                return sock.sendMessage(from, { text: '🔓 Grupo aberto!' }, { quoted: msg });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ O bot precisa de ser Administrador.' }, { quoted: msg });
-            }
-        }
-
-        if (command === 'fechar') {
-            if (!isGroup || !isOwner) return;
-            try {
-                await sock.groupSettingUpdate(from, 'announcement');
-                return sock.sendMessage(from, { text: '🔒 Grupo fechado!' }, { quoted: msg });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ O bot precisa de ser Administrador.' }, { quoted: msg });
-            }
-        }
-
-        if (command === 'silenciar') {
-            if (!isGroup || !isOwner) return;
-            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-            if (mentioned.length > 0) {
-                const targetClean = mentioned[0].replace(/[^0-9]/g, '');
-                mutedUsers.add(targetClean);
-                return sock.sendMessage(from, { text: '🔇 Membro silenciado com sucesso!' }, { quoted: msg });
-            }
-        }
-
-        if (command === 'dessilenciar') {
-            if (!isGroup || !isOwner) return;
-            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-            if (mentioned.length > 0) {
-                const targetClean = mentioned[0].replace(/[^0-9]/g, '');
-                mutedUsers.delete(targetClean);
-                return sock.sendMessage(from, { text: '🔉 Membro dessilenciado com sucesso!' }, { quoted: msg });
-            }
-        }
-
-        if (command === 'ia') {
-            const pergunta = args.join(' ');
-            if (!pergunta) return sock.sendMessage(from, { text: '❌ Faça uma pergunta: €ia <texto>' }, { quoted: msg });
-            
-            try {
-                const response = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(pergunta)}&format=json`);
-                const respostaIA = response.data.AbstractText || "Percebi a sua pergunta! Estou online para o ajudar.";
-                return sock.sendMessage(from, { text: `🤖 *IA:* ${respostaIA}` }, { quoted: msg });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ Erro ao consultar a IA.' }, { quoted: msg });
-            }
-        }
-
-        if (command === 'hora') {
-            const dataHora = new Date().toLocaleString('pt-PT', { timeZone: 'Africa/Maputo' });
-            return sock.sendMessage(from, { text: `🌍 Hora atual: *${dataHora}*` }, { quoted: msg });
-        }
-    });
-}
-
-startBot();
+                "│

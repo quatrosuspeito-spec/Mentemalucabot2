@@ -105,13 +105,11 @@ async function startBot() {
         const command = args.shift()?.toLowerCase();
 
         if (command === 'ping') {
-            return sock.sendMessage(from, { text: '🏓 *Pong!*
-🟢 Status: *Online Pro*' });
+            return sock.sendMessage(from, { text: '🟢 Status: *Online Pro*' });
         }
 
         if (command === 'menu') {
-            return sock.sendMessage(from, { text: '🔮 *MENTEMALUCA BOT 2.0 Pro*
-Digite os comandos com o prefixo €' });
+            return sock.sendMessage(from, { text: 'Digite os comandos com o prefixo €' });
         }
     });
 }

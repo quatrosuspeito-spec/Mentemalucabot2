@@ -1,13 +1,15 @@
+/* STREAMING_CHUNK:Configuring HTTP server for Render */
 const http = require('http');
 const PORT = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Bot Online');
+    res.end('Mentemaluca Bot Online');
 }).listen(PORT, () => {
-    console.log(`Servidor HTTP a escutar na porta ${PORT}`);
+    console.log(`[HTTP] Servidor a escutar na porta ${PORT}`);
 });
 
+/* STREAMING_CHUNK:Importing required dependencies */
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -23,7 +25,8 @@ require('dotenv').config();
 
 const PREFIX = process.env.BOT_PREFIX || '€';
 const OWNER_NUMBER = '258856868102';
-const TELEGRAM_TOKEN = '8892332641:AAFL7pp9MiEggo6ztp2tuT1l4Wuovc5X6Ec';
+// TOKEN CORRIGIDO CONFORME A IMAGEM DO BOTFATHER:
+const TELEGRAM_TOKEN = '8892332641:AAFL7pp9MIeGgo6ztp2tuT1l4WuovcSX6Ec';
 
 let globalSock = null;
 let lastUpdateId = 0;
@@ -44,7 +47,7 @@ const charadasDatabase = [
     { pergunta: "O que é, o que é? Dá muitas voltas e não sai do lugar.", resposta: "relogio" }
 ];
 
-// Enviar mensagens para o Telegram via HTTP Direto
+/* STREAMING_CHUNK:Defining Telegram messaging helpers */
 async function sendTelegramMessage(chatId, text, parseMode = '') {
     try {
         await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
@@ -53,17 +56,25 @@ async function sendTelegramMessage(chatId, text, parseMode = '') {
             parse_mode: parseMode
         });
     } catch (e) {
-        console.log('Erro ao enviar mensagem Telegram:', e.response?.data || e.message);
+        console.log('[TELEGRAM ERR]', e.response?.data || e.message);
     }
 }
 
-// Leitor HTTP de comandos do Telegram para o pareamento
+/* STREAMING_CHUNK:Initializing Telegram Poller */
 async function startTelegramPoller() {
-    console.log('🤖 Leitor HTTP do Telegram iniciado com sucesso!');
+    console.log('🤖 A iniciar ligação ao Telegram...');
+    
+    try {
+        await axios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
+        console.log('✅ Webhooks antigos eliminados e token verificado!');
+    } catch (e) {
+        console.log('❌ Erro de validação do token do Telegram:', e.response?.data || e.message);
+    }
+
     setInterval(async () => {
         try {
             const res = await axios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`, {
-                params: { offset: lastUpdateId + 1, timeout: 25 }
+                params: { offset: lastUpdateId + 1, timeout: 5 }
             });
 
             if (res.data && res.data.ok && res.data.result.length > 0) {
@@ -74,6 +85,7 @@ async function startTelegramPoller() {
 
                     const chatId = msg.chat.id;
                     const text = msg.text.trim();
+                    console.log(`📩 Comando Telegram recebido: ${text}`);
 
                     if (text.startsWith('/conectar') || text.startsWith('/start')) {
                         const parts = text.split(' ');
@@ -94,6 +106,7 @@ async function startTelegramPoller() {
                             const code = await globalSock.requestPairingCode(phone);
                             const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 Seu Código de Pareamento:\n\n\`${code}\`\n\nIntroduza este código no seu WhatsApp imediatamente!`;
                             await sendTelegramMessage(chatId, resposta, 'Markdown');
+                            console.log('✅ Código gerado e enviado para o Telegram!');
                         } catch (err) {
                             await sendTelegramMessage(chatId, `❌ Erro ao gerar código: ${err.message}`);
                         }
@@ -101,9 +114,10 @@ async function startTelegramPoller() {
                 }
             }
         } catch (err) {}
-    }, 2000);
+    }, 1500);
 }
 
+/* STREAMING_CHUNK:Initializing WhatsApp Socket Handler */
 async function startWhatsAppBot() {
     const { state, saveCreds } = await useMultiFileAuthState('./session');
     const { version } = await fetchLatestBaileysVersion();
@@ -126,12 +140,14 @@ async function startWhatsAppBot() {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
+            console.log('Conexão fechada. Reconectando...', shouldReconnect);
             if (shouldReconnect) startWhatsAppBot();
         } else if (connection === 'open') {
             console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');
         }
     });
 
+    /* STREAMING_CHUNK:Processing Incoming Messages */
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         const msg = messages[0];
@@ -189,7 +205,7 @@ async function startWhatsAppBot() {
         const args = body.slice(PREFIX.length).trim().split(/ +/);
         const command = args.shift()?.toLowerCase();
 
-        // 1. MENU
+        // MENU
         if (command === 'menu') {
             const menuTexto = [
                 "╔══════════════════════════════════╗",
@@ -214,13 +230,12 @@ async function startWhatsAppBot() {
                 "│ ⬇️ *€rebaixar @num* — Remove admin",
                 "│ 🚫 *€ban @num* — Banir membro do grupo",
                 "│ 🔗 *€link* — Obtém link de convite",
-                "│ 🧹 *€limpar* — Limpa o chat atual",
                 "",
                 "━━━ 🍑 𝕄Í𝔻𝕀𝔸 𝙋ℝ𝕀𝕍𝔸𝔻𝔸 ━━━",
                 "│ 🍑 *€viewonce* — Revela view once",
                 "│ 🥹 *€salvar* — Guarda mídia citada",
                 "",
-                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝔏 ━━━",
+                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝕃 ━━━",
                 "│ 🤖 *€ia [pergunta]* — Pergunta à IA",
                 "│ 😇 *€ia auto* — Liga IA automática",
                 "│ 🛑 *€ia desligar* — Desliga a IA",
@@ -239,32 +254,27 @@ async function startWhatsAppBot() {
             return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
         }
 
-        // 2. PING
         if (command === 'ping') {
             return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo, rápido e online.' }, { quoted: msg });
         }
 
-        // 3. HORA
         if (command === 'hora') {
             const dataHora = new Date().toLocaleString('pt-PT', { timeZone: 'Africa/Maputo' });
             return sock.sendMessage(from, { text: `🌍 Hora atual em Moçambique: *${dataHora}*` }, { quoted: msg });
         }
 
-        // 4. QUIZ
         if (command === 'quiz') {
             const randomQuiz = quizDatabase[Math.floor(Math.random() * quizDatabase.length)];
             activeQuiz[from] = randomQuiz;
             return sock.sendMessage(from, { text: `🎮 *QUIZ MENTEMALUCA*\n\n❓ *Pergunta:* ${randomQuiz.pergunta}\n\n${randomQuiz.opcoes}\n\n👉 *Responda apenas com a letra (A, B, C ou D)!*` }, { quoted: msg });
         }
 
-        // 5. CHARADAS
         if (command === 'charada') {
             const r = charadasDatabase[Math.floor(Math.random() * charadasDatabase.length)];
             activeCharadas[from] = r.resposta;
             return sock.sendMessage(from, { text: `🧩 *CHARADA*\n\n❓ ${r.pergunta}\n\n👉 Envie a resposta no chat!` }, { quoted: msg });
         }
 
-        // 6. INTELIGÊNCIA ARTIFICIAL (IA)
         if (command === 'ia') {
             const pergunta = args.join(' ');
             if (!pergunta) return sock.sendMessage(from, { text: '❌ Faça uma pergunta: €ia <texto>' }, { quoted: msg });
@@ -287,7 +297,6 @@ async function startWhatsAppBot() {
             return sock.sendMessage(from, { text: '🛑 IA Automática desligada!' }, { quoted: msg });
         }
 
-        // 7. FUNÇÕES DE DONO / GRUPO
         if (command === 'nuke') {
             if (!isGroup || !isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar em grupos!' }, { quoted: msg });
             try {
@@ -326,7 +335,7 @@ async function startWhatsAppBot() {
             const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
             if (mentioned.length > 0) {
                 mutedUsers.delete(mentioned[0].replace(/[^0-9]/g, ''));
-                return sock.sendMessage(from, { text: '🔉 Membro dessilenciado!' }, { quoted: msg });
+                return sock.sendMessage(from, { text: 'JB Membro dessilenciado!' }, { quoted: msg });
             }
         }
 
@@ -364,7 +373,6 @@ async function startWhatsAppBot() {
             } catch (e) {}
         }
 
-        // 8. MÍDIA / SALVAR VIEW ONCE
         if (command === 'salvar' || command === 'viewonce') {
             const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
             if (!quoted) return sock.sendMessage(from, { text: '❌ Marque uma imagem ou vídeo viewonce/mídia!' }, { quoted: msg });
@@ -385,6 +393,6 @@ async function startWhatsAppBot() {
     });
 }
 
-// Iniciar os serviços
+/* STREAMING_CHUNK:Bootstrapping Application */
 startWhatsAppBot();
 startTelegramPoller();

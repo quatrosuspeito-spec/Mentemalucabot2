@@ -17,7 +17,9 @@ require('dotenv').config();
 
 const PREFIX = process.env.BOT_PREFIX || '€';
 let OWNER_NUMBER = process.env.OWNER_NUMBER || '258856868102';
-const TELEGRAM_TOKEN = '8892332641:AAFL7pp9MleGgo6ztp2tuT1I4Wuovc5X6Ec';
+
+// Token corrigido caractere por caractere a partir do BotFather
+const TELEGRAM_TOKEN = '8892332641:AAFL7pp9MiEggo6ztp2tuT1l4Wuovc5X6Ec';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 const mutedUsers = new Set();
@@ -46,7 +48,7 @@ let activeQuiz = {};
 let tgBot = null;
 if (TELEGRAM_TOKEN) {
     tgBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
-    console.log('🤖 Telegram Bot ativado com sucesso!');
+    console.log('🤖 Telegram Bot ativado com o Token Correto!');
 
     tgBot.on('polling_error', (err) => {
         console.log('⚠️ Polling aviso:', err.message);
@@ -181,7 +183,7 @@ async function startBot() {
                 "│ 😇 *€ia auto* — Liga IA automática",
                 "│ 🛑 *€ia desligar* — Desliga a IA",
                 "",
-                "━━━ 🎵 𝔻𝕆𝕎ℕ𝓞𝔸𝔻𝕊 ━━━",
+                "━━━ 🎵 𝔻𝕆𝕎ℕ𝕃𝕆𝔸𝔻𝕊 ━━━",
                 "│ 🎵 *€baixar música [nome]* — Baixa MP3",
                 "│ 🎬 *€baixar vídeo [nome]* — Baixa vídeo",
                 "│ 📷 *€baixar foto [nome]* — Busca foto",

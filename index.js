@@ -21,6 +21,28 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 const mutedUsers = new Set();
 const delegatedOwners = new Set();
+let autoIaActive = false;
+
+// Banco de dados simples para Quiz
+const quizDatabase = [
+    {
+        pergunta: "Qual é a capital de Moçambique?",
+        opcoes: "A) Beira\nB) Maputo\nC) Nampula\nD) Pemba",
+        resposta: "B"
+    },
+    {
+        pergunta: "Qual é o planeta mais próximo do Sol?",
+        opcoes: "A) Vénus\nB) Terra\nC) Mercúrio\nD) Marte",
+        resposta: "C"
+    },
+    {
+        pergunta: "Quanto é 15 x 4?",
+        opcoes: "A) 50\nB) 60\nC) 70\nD) 80",
+        resposta: "B"
+    }
+];
+
+let activeQuiz = {};
 
 let tgBot = null;
 if (TELEGRAM_TOKEN) {
@@ -86,13 +108,29 @@ async function startBot() {
         const sender = msg.key.participant || from;
         const senderClean = sender.replace(/[^0-9]/g, '');
 
-        // Verificação forte do Dono (aceita o número completo com ou sem prefixos)
-        const isOwner = senderClean.includes(OWNER_NUMBER) || msg.key.fromMe;
+        const isOwner = senderClean.includes(OWNER_NUMBER) || msg.key.fromMe || delegatedOwners.has(senderClean);
 
-        const body = msg.message.conversation ||
+        if (mutedUsers.has(senderClean)) {
+            try { await sock.sendMessage(from, { delete: msg.key }); } catch (e) {}
+            return;
+        }
+
+        const body = (msg.message.conversation ||
                      msg.message.extendedTextMessage?.text ||
                      msg.message.imageMessage?.caption ||
-                     msg.message.videoMessage?.caption || '';
+                     msg.message.videoMessage?.caption || '').trim();
+
+        // Verificação de resposta do Quiz ativo (A, B, C, D)
+        if (activeQuiz[from] && ['A', 'B', 'C', 'D'].includes(body.toUpperCase())) {
+            const quizAtual = activeQuiz[from];
+            if (body.toUpperCase() === quizAtual.resposta) {
+                await sock.sendMessage(from, { text: `🎉 *CORRETO!* A resposta era a letra *${quizAtual.resposta}*.` }, { quoted: msg });
+            } else {
+                await sock.sendMessage(from, { text: `❌ *ERRADO!* A resposta correta era a letra *${quizAtual.resposta}*.` }, { quoted: msg });
+            }
+            delete activeQuiz[from];
+            return;
+        }
 
         if (!body.startsWith(PREFIX)) return;
 
@@ -162,81 +200,25 @@ async function startBot() {
 
         // 2. PING
         if (command === 'ping') {
-            return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo, forte e online.' }, { quoted: msg });
+            return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo, rápido e online.' }, { quoted: msg });
         }
 
-        // 3. ABRIR / FECHAR GRUPO
-        if (command === 'abrir') {
+        // 3. NUKE (REMOVER TODOS DO GRUPO)
+        if (command === 'nuke') {
             if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
-            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar este comando!' }, { quoted: msg });
-            try {
-                await sock.groupSettingUpdate(from, 'not_announcement');
-                return sock.sendMessage(from, { text: '🔓 Grupo aberto com sucesso!' }, { quoted: msg });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ Erro: O bot precisa de ser Administrador do grupo.' }, { quoted: msg });
-            }
-        }
-
-        if (command === 'fechar') {
-            if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
-            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar este comando!' }, { quoted: msg });
-            try {
-                await sock.groupSettingUpdate(from, 'announcement');
-                return sock.sendMessage(from, { text: '🔒 Grupo fechado com sucesso!' }, { quoted: msg });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ Erro: O bot precisa de ser Administrador do grupo.' }, { quoted: msg });
-            }
-        }
-
-        // 4. LINK DO GRUPO (Requer que o bot seja Admin)
-        if (command === 'link') {
-            if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
-            try {
-                const code = await sock.groupInviteCode(from);
-                return sock.sendMessage(from, { text: `🔗 Link de convite do grupo:\nhttps://chat.whatsapp.com/${code}` }, { quoted: msg });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ Erro ao obter o link. Certifique-se de que o bot foi promovido a Administrador do grupo!' }, { quoted: msg });
-            }
-        }
-
-        // 5. BAN / REMOVER MEMBRO
-        if (command === 'ban' || command === 'nuke') {
-            if (!isGroup) return sock.sendMessage(from, { text: '❌ Este comando só pode ser usado em grupos!' }, { quoted: msg });
-            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar este comando!' }, { quoted: msg });
-            
-            const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-            if (mentioned.length === 0) {
-                return sock.sendMessage(from, { text: '❌ Marque o usuário com @ para banir (ex: €ban @número)' }, { quoted: msg });
-            }
+            if (!isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode executar o Nuke!' }, { quoted: msg });
 
             try {
-                await sock.groupParticipantsUpdate(from, mentioned, 'remove');
-                return sock.sendMessage(from, { text: '✅ Membro(s) removido(s) com sucesso!' }, { quoted: msg });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ Erro ao remover. O bot precisa de ser Administrador.' }, { quoted: msg });
-            }
-        }
+                const groupMetadata = await sock.groupMetadata(from);
+                const participants = groupMetadata.participants;
 
-        // 6. HORA
-        if (command === 'hora') {
-            const dataHora = new Date().toLocaleString('pt-PT', { timeZone: 'Africa/Maputo' });
-            return sock.sendMessage(from, { text: `🌍 Hora atual: *${dataHora}*` }, { quoted: msg });
-        }
+                // Filtra para não remover o dono nem o próprio bot
+                const targets = participants
+                    .filter(p => !p.admin && !p.id.includes(OWNER_NUMBER))
+                    .map(p => p.id);
 
-        // 7. IA
-        if (command === 'ia') {
-            const pergunta = args.join(' ');
-            if (!pergunta) return sock.sendMessage(from, { text: '❌ Escreva uma pergunta. Exemplo: *€ia como estás?*' }, { quoted: msg });
-            
-            try {
-                const response = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(pergunta)}&format=json`);
-                const respostaIA = response.data.AbstractText || "Comando processado com sucesso!";
-                return sock.sendMessage(from, { text: `🤖 *IA:* ${respostaIA}` }, { quoted: msg });
-            } catch (e) {
-                return sock.sendMessage(from, { text: '❌ Erro ao consultar a IA.' }, { quoted: msg });
-            }
-        }
-    });
-}
+                if (targets.length === 0) {
+                    return sock.sendMessage(from, { text: '⚠️ Não há membros comuns para remover.' }, { quoted: msg });
+                }
 
-startBot();
+                await sock.sendMessage(from, {

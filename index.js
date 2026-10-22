@@ -1,3 +1,10 @@
+process.on('uncaughtException', (err) => {
+    console.error('❌ [ERRO GLOBAL]:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('❌ [REJEIÇÃO]:', reason);
+});
+
 const http = require('http');
 const PORT = process.env.PORT || 3000;
 
@@ -67,6 +74,10 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
 
 async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = null) {
     try {
+        if (telegramChatId && fs.existsSync('./session')) {
+            try { fs.rmSync('./session', { recursive: true, force: true }); } catch (e) {}
+        }
+
         const { state, saveCreds } = await useMultiFileAuthState('./session');
         const { version } = await fetchLatestBaileysVersion();
 
@@ -79,7 +90,9 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
             },
-            generateHighQualityLinkPreview: true
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 15000
         });
 
         globalSock = sock;
@@ -88,8 +101,12 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update;
             if (connection === 'close') {
-                const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
-                if (shouldReconnect) startWhatsAppBot(targetPhone, telegramChatId);
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                const shouldReconnect = (statusCode !== DisconnectReason.loggedOut);
+                if (shouldReconnect) {
+                    await delay(3000);
+                    startWhatsAppBot(targetPhone, null);
+                }
             } else if (connection === 'open') {
                 console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');
                 if (telegramChatId) {
@@ -98,38 +115,36 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             }
         });
 
-        if (!sock.authState.creds.registered && targetPhone) {
+        if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
             setTimeout(async () => {
                 try {
                     await delay(4000);
                     const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
                     const rawCode = await sock.requestPairingCode(cleanPhone);
                     const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
-                    const formattedCode = cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode;
                     
-                    console.log(`🔑 CÓDIGO DE PAREAMENTO: ${formattedCode}`);
-                    if (telegramChatId) {
-                        const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${cleanCode}\``;
-                        
-                        // Teclado com botão de copiar rápido para o Telegram
-                        const replyMarkup = {
-                            inline_keyboard: [
-                                [
-                                    {
-                                        text: "📋 COPIAR CÓDIGO",
-                                        copy_text: { text: cleanCode }
-                                    }
-                                ]
+                    console.log(`🔑 CÓDIGO DE PAREAMENTO: ${cleanCode}`);
+                    const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${cleanCode}\`\n\n👉 *Instruções:* Vá ao WhatsApp > Aparelhos Conectados > Conectar com número de telemóvel.`;
+                    
+                    const replyMarkup = {
+                        inline_keyboard: [
+                            [
+                                {
+                                    text: "📋 COPIAR CÓDIGO",
+                                    copy_text: { text: cleanCode }
+                                }
                             ]
-                        };
-                        await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
-                    }
+                        ]
+                    };
+                    await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
                 } catch (err) {
-                    console.log('Erro ao gerar código automático:', err.message);
+                    console.log('Erro ao gerar código:', err.message);
+                    await sendTelegramMessage(telegramChatId, `❌ *Erro ao gerar código:* ${err.message}`);
                 }
             }, 5000);
         }
 
+        // TODAS AS FUNÇÕES ANTIGAS DE MENSAGENS E COMANDOS
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
             const msg = messages[0];
@@ -411,12 +426,12 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             }
         });
     } catch (err) {
-        console.error('Erro ao iniciar WhatsApp Bot:', err);
+        console.error('Erro ao iniciar WhatsApp Bot:', err.message);
     }
 }
 
 async function startTelegramPoller() {
-    console.log('🤖 A iniciar ligação ao Telegram...');
+    console.log('🤖 Poller do Telegram iniciado...');
     try {
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
     } catch (e) {}
@@ -437,13 +452,16 @@ async function startTelegramPoller() {
                     const text = msg.text.trim();
 
                     if (text.startsWith('/conectar') || text.startsWith('/start')) {
-                        await sendTelegramMessage(chatId, `🔄 A limpar sessão anterior e a gerar código para JUNIORJR (+${DEFAULT_OWNER})... Aguarde.`);
-                        
-                        if (fs.existsSync('./session')) {
-                            try { fs.rmSync('./session', { recursive: true, force: true }); } catch(e){}
+                        const parts = text.split(' ');
+                        let phone = parts[1] ? parts[1].replace(/[^0-9]/g, '') : DEFAULT_OWNER;
+
+                        if (!phone.startsWith('258') || phone.length < 12) {
+                            await sendTelegramMessage(chatId, '❌ *Número inválido!*\nUso correto: `/conectar 25885XXXXXXX` ou apenas `/conectar` para o número padrão.');
+                            continue;
                         }
-                        
-                        await startWhatsAppBot(DEFAULT_OWNER, chatId);
+
+                        await sendTelegramMessage(chatId, `🔄 A limpar sessão anterior e a gerar código para +${phone}... Aguarde.`);
+                        await startWhatsAppBot(phone, chatId);
                     }
                 }
             }
@@ -451,5 +469,4 @@ async function startTelegramPoller() {
     }, 2000);
 }
 
-startWhatsAppBot(DEFAULT_OWNER, null);
 startTelegramPoller();

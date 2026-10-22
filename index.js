@@ -72,8 +72,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            // Alterado para Ubuntu/Chrome para aceitar o pareamento tal como o outro bot
-            browser: Browsers.ubuntu('Chrome'),
+            browser: Browsers.macOS('Chrome'),
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -101,6 +100,17 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             } else if (connection === 'open') {
                 isConnecting = false;
                 console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');
+                
+                // Envia mensagem de confirmação para o próprio número conectado (Saved Messages / Chat Próprio)
+                try {
+                    const ownerJid = `${targetPhone}@s.whatsapp.net`;
+                    await sock.sendMessage(ownerJid, { 
+                        text: "⚡ *MENTEMALUCA BOT*\n\n✅ *WhatsApp conectado com sucesso ao bot!*\nO sistema está totalmente online e pronto a usar os comandos com o prefixo `€`." 
+                    });
+                } catch (e) {
+                    console.log('[ERRO AO ENVIAR MENSAGEM DE CONEXÃO NO WHATSAPP]', e.message);
+                }
+
                 if (telegramChatId) {
                     await sendTelegramMessage(telegramChatId, '✅ *WhatsApp conectado com sucesso ao bot!*');
                 }
@@ -108,7 +118,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(8000);
+            await delay(9000);
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
@@ -126,7 +136,16 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     ]
                 };
 
+                // Envia para o Telegram e também tenta enviar o código para as mensagens guardadas do próprio número no WhatsApp se possível
                 await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
+                
+                try {
+                    const ownerJid = `${cleanPhone}@s.whatsapp.net`;
+                    await sock.sendMessage(ownerJid, { 
+                        text: `🔮 *MENTEMALUCA BOT - PAREAMENTO*\n\n🔑 O teu código de pareamento é: *${cleanCode}*\n\nVá em Aparelhos Conectados > Conectar com número de telemóvel para concluir.` 
+                    });
+                } catch (err) {}
+
             } catch (err) {
                 isConnecting = false;
                 console.log('Erro ao gerar código:', err.message);
@@ -215,7 +234,7 @@ async function startTelegramPoller() {
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
     } catch (e) {}
 
-    setInterval(async () => {
+setInterval(async () => {
         try {
             const res = await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`, {
                 params: { offset: lastUpdateId + 1, timeout: 5 }
@@ -244,7 +263,7 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A gerar código único para +${phone}... Aguarde 8 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A preparar o pedido para +${phone}... Aguarde 9 segundos.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }

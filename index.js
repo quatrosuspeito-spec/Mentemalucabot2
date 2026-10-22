@@ -22,7 +22,6 @@ const {
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
     delay,
-    downloadMediaMessage,
     Browsers
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
@@ -41,28 +40,10 @@ let globalSock = null;
 let lastUpdateId = 0;
 let isConnecting = false;
 const mutedUsers = new Set();
-let activeQuiz = {};
-let activeCharadas = {};
-
-const quizDatabase = [
-    { pergunta: "Qual é a capital de Moçambique?", opcoes: "A) Beira\nB) Maputo\nC) Nampula\nD) Pemba", resposta: "B" },
-    { pergunta: "Qual é o planeta mais próximo do Sol?", opcoes: "A) Vénus\nB) Terra\nC) Mercúrio\nD) Marte", resposta: "C" },
-    { pergunta: "Quanto é 15 x 4?", opcoes: "A) 50\nB) 60\nC) 70\nD) 80", resposta: "B" }
-];
-
-const charadasDatabase = [
-    { pergunta: "O que é, o que é? Tem cabeça e tem dente, não é bicho e nem é gente.", resposta: "alho" },
-    { pergunta: "O que é, o que é? Quanto mais se tira, maior fica.", resposta: "buraco" },
-    { pergunta: "O que é, o que é? Dá muitas voltas e não sai do lugar.", resposta: "relogio" }
-];
 
 async function sendTelegramMessage(chatId, text, replyMarkup = null) {
     try {
-        const payload = {
-            chat_id: chatId,
-            text: text,
-            parse_mode: 'Markdown'
-        };
+        const payload = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
         if (replyMarkup) payload.reply_markup = replyMarkup;
         await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, payload);
     } catch (e) {
@@ -71,13 +52,7 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
 }
 
 async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = null) {
-    if (isConnecting) {
-        if (telegramChatId) {
-            await sendTelegramMessage(telegramChatId, '⚠️ *Já existe uma tentativa de conexão em curso.* Aguarde alguns segundos.');
-        }
-        return;
-    }
-    
+    if (isConnecting) return;
     isConnecting = true;
 
     try {
@@ -119,9 +94,8 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const shouldReconnect = (statusCode !== DisconnectReason.loggedOut);
                 
-                if (shouldReconnect) {
+                if (shouldReconnect && !globalSock?.authState?.creds?.registered) {
                     await delay(3000);
-                    startWhatsAppBot(targetPhone, null);
                 }
             } else if (connection === 'open') {
                 isConnecting = false;
@@ -133,7 +107,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(7000); // Aguarda a estabilização completa do socket
+            await delay(8000); // Garante estabilidade completa do socket
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
@@ -147,12 +121,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
 
                 const replyMarkup = {
                     inline_keyboard: [
-                        [
-                            {
-                                text: "📋 COPIAR CÓDIGO",
-                                copy_text: { text: cleanCode }
-                            }
-                        ]
+                        [{ text: "📋 COPIAR CÓDIGO", copy_text: { text: cleanCode } }]
                     ]
                 };
 
@@ -172,20 +141,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             if (!msg.message) return;
 
             const from = msg.key.remoteJid;
-            const isGroup = from.endsWith('@g.us');
-            const sender = msg.key.participant || from;
-            const senderClean = sender.replace(/[^0-9]/g, '');
-            const isOwner = senderClean.includes(DEFAULT_OWNER) || msg.key.fromMe;
-
-            if (mutedUsers.has(senderClean)) {
-                try { await sock.sendMessage(from, { delete: msg.key }); } catch (e) {}
-                return;
-            }
-
-            const body = (msg.message.conversation ||
-                         msg.message.extendedTextMessage?.text ||
-                         msg.message.imageMessage?.caption ||
-                         msg.message.videoMessage?.caption || '').trim();
+            const body = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
 
             if (!body.startsWith(PREFIX)) return;
             const args = body.slice(PREFIX.length).trim().split(/ +/);
@@ -222,73 +178,4 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     "│ 🔇 *€silenciar @num* — Silencia membro",
                     "│ 🔉 *€dessilenciar @num* — Dessilencia membro",
                     "│ 🔓 *€abrir* — Abre o grupo",
-                    "│ 🔒 *€fechar* — Fecha o grupo",
-                    "│ ⭐ *€promover @num* — Promove a admin",
-                    "│ ⬇️ *€rebaixar @num* — Remove admin",
-                    "│ 🚫 *€ban @num* — Banir membro",
-                    "│ 🔗 *€link* — Link de convite",
-                    "",
-                    "━━━ 🍑 𝕄Í𝔻𝕀𝔸 & 🤖 𝕀𝔸 ━━━",
-                    "│ 🍑 *€viewonce* / *€salvar* — Salva mídia",
-                    "│ 🤖 *€ia [pergunta]* — Pergunta à IA",
-                    "│ 🎮 *€quiz* / *€charada* — Jogos",
-                    "│ 🏓 *€ping* — Status e latência",
-                    "",
-                    "╔══════════════════════════════════╗",
-                    "║  ⚡ 🟢 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝕆ℕ𝕃𝕀ℕ𝔼 ⚡  ║",
-                    "╚══════════════════════════════════╝"
-                ].join("\n");
-                return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
-            }
-
-            if (command === 'ping') {
-                return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo e online.' }, { quoted: msg });
-            }
-        });
-
-    } catch (err) {
-        isConnecting = false;
-        console.error('Erro ao iniciar WhatsApp Bot:', err.message);
-    }
-}
-
-async function startTelegramPoller() {
-    console.log('🤖 Poller do Telegram iniciado...');
-    try {
-        await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
-    } catch (e) {}
-
-    setInterval(async () => {
-        try {
-            const res = await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`, {
-                params: { offset: lastUpdateId + 1, timeout: 5 }
-            });
-
-            if (res.data && res.data.ok && res.data.result.length > 0) {
-                for (let update of res.data.result) {
-                    lastUpdateId = update.update_id;
-                    const msg = update.message;
-                    if (!msg || !msg.text) continue;
-
-                    const chatId = msg.chat.id;
-                    const text = msg.text.trim();
-
-                    if (text.startsWith('/conectar') || text.startsWith('/start')) {
-                        const parts = text.split(' ');
-                        let phone = parts[1] ? parts[1].replace(/[^0-9]/g, '') : DEFAULT_OWNER;
-
-                        if (!phone.startsWith('258') || phone.length < 12) {
-                            await sendTelegramMessage(chatId, '❌ *Número inválido!*\nUso correto: `/conectar 25885XXXXXXX` ou apenas `/conectar` para o número padrão.');
-                            continue;
-                        }
-
-                        await sendTelegramMessage(chatId, `🔄 A preparar nova sessão no servidor para +${phone}... Aguarde 7 segundos pelo código único.`);
-                        await startWhatsAppBot(phone, chatId);
-                    }
-                }
-            }
-        } catch (err) {}
-    }, 2000);
-}
-
-startTelegramPoller();
+                    "│ 

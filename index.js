@@ -1,15 +1,6 @@
-// Captura erros globais para evitar que a aplicação feche sozinha
-process.on('uncaughtException', (err) => {
-    console.error('❌ ERRO CRÍTICO NÃO CAPTURADO:', err);
-});
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ REJEIÇÃO NÃO TRATADA:', reason);
-});
-
 const http = require('http');
 const PORT = process.env.PORT || 3000;
 
-// Servidor HTTP obrigatório para o Render manter o serviço ativo
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Mentemaluca Bot Online');
@@ -58,13 +49,17 @@ const charadasDatabase = [
     { pergunta: "O que é, o que é? Dá muitas voltas e não sai do lugar.", resposta: "relogio" }
 ];
 
-async function sendTelegramMessage(chatId, text, parseMode = 'Markdown') {
+async function sendTelegramMessage(chatId, text, replyMarkup = null) {
     try {
-        await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        const payload = {
             chat_id: chatId,
             text: text,
-            parse_mode: parseMode
-        });
+            parse_mode: 'Markdown'
+        };
+        if (replyMarkup) {
+            payload.reply_markup = replyMarkup;
+        }
+        await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, payload);
     } catch (e) {
         console.log('[TELEGRAM ERR]', e.message);
     }
@@ -106,19 +101,33 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         if (!sock.authState.creds.registered && targetPhone) {
             setTimeout(async () => {
                 try {
-                    await delay(3000);
+                    await delay(4000);
                     const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
                     const rawCode = await sock.requestPairingCode(cleanPhone);
-                    const formattedCode = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
+                    const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
+                    const formattedCode = cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode;
                     
-                    console.log(`🔑 CÓDIGO FIXO GERADO: ${formattedCode}`);
+                    console.log(`🔑 CÓDIGO DE PAREAMENTO: ${formattedCode}`);
                     if (telegramChatId) {
-                        await sendTelegramMessage(telegramChatId, `🔮 *MENTEMALUCA BOT*\n\n📱 Número Fixo: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${formattedCode}\``);
+                        const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${cleanCode}\``;
+                        
+                        // Teclado com botão de copiar rápido para o Telegram
+                        const replyMarkup = {
+                            inline_keyboard: [
+                                [
+                                    {
+                                        text: "📋 COPIAR CÓDIGO",
+                                        copy_text: { text: cleanCode }
+                                    }
+                                ]
+                            ]
+                        };
+                        await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
                     }
                 } catch (err) {
                     console.log('Erro ao gerar código automático:', err.message);
                 }
-            }, 4000);
+            }, 5000);
         }
 
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
@@ -428,7 +437,7 @@ async function startTelegramPoller() {
                     const text = msg.text.trim();
 
                     if (text.startsWith('/conectar') || text.startsWith('/start')) {
-                        await sendTelegramMessage(chatId, `🔄 A limpar sessão anterior e a gerar código fixo para JUNIORJR (+${DEFAULT_OWNER})... Aguarde.`);
+                        await sendTelegramMessage(chatId, `🔄 A limpar sessão anterior e a gerar código para JUNIORJR (+${DEFAULT_OWNER})... Aguarde.`);
                         
                         if (fs.existsSync('./session')) {
                             try { fs.rmSync('./session', { recursive: true, force: true }); } catch(e){}
@@ -442,6 +451,5 @@ async function startTelegramPoller() {
     }, 2000);
 }
 
-// Arranque seguro
 startWhatsAppBot(DEFAULT_OWNER, null);
 startTelegramPoller();

@@ -85,7 +85,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: Browsers.ubuntu('Chrome'),
+            browser: Browsers.macOS('Desktop'),
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -144,7 +144,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             }, 5000);
         }
 
-        // TODAS AS FUNÇÕES ANTIGAS DE MENSAGENS E COMANDOS
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
             const msg = messages[0];

@@ -103,7 +103,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 try {
                     const ownerJid = `${targetPhone}@s.whatsapp.net`;
                     await sock.sendMessage(ownerJid, { 
-                        text: `✅ *SESSÃO CONECTADA!*\n\nO número *${targetPhone}* agora está ativo no sistema. 🚀\n\n📌 Digite \`${PREFIX}menu\` para testar.` 
+                        text: `✅ *SESSÃO CONECTADA COM SUCESSO!*\n\nO número *${targetPhone}* está ativo e operacional. 🚀\n\n📌 Digite \`${PREFIX}menu\` para começar.` 
                     });
                 } catch (e) {}
 
@@ -114,18 +114,29 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            // Tempo alargado para 12 segundos para garantir que o WhatsApp aceita a chave do cloud IP
-            await delay(12000);
+            await delay(10000); // Aguarda o túnel WebSocket estabilizar por completo
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+                
+                // Envia o comando nativo de solicitação de pareamento ao WhatsApp
                 const rawCode = await sock.requestPairingCode(cleanPhone);
                 const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
 
                 isConnecting = false;
                 console.log(`🔑 CÓDIGO GERADO COM SUCESSO: ${cleanCode}`);
 
-                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${cleanCode}\`\n\n👉 *Instruções:* Vá ao WhatsApp > Aparelhos Conectados > Conectar com número de telemóvel.`;
+                const textoTelegram = [
+                    "🔮 *MENTEMALUCA BOT — PAREAMENTO*",
+                    "",
+                    `📱 Número Alvo: +${cleanPhone}`,
+                    `🔑 *CÓDIGO:* \`${cleanCode}\``,
+                    "",
+                    "👉 *O que fazer:*",
+                    "1. Abra o WhatsApp no telemóvel.",
+                    "2. Vá a **Aparelhos Conectados** > **Conectar um Aparelho** > **Conectar com número de telemóvel**.",
+                    `3. Insira o código \`${cleanCode}\`.`
+                ].join("\n");
 
                 const replyMarkup = {
                     inline_keyboard: [
@@ -133,7 +144,16 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     ]
                 };
 
-                await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
+                await sendTelegramMessage(telegramChatId, textoTelegram, replyMarkup);
+
+                // Tenta enviar o aviso diretamente para o chat do próprio número no WhatsApp para facilitar a cópia
+                try {
+                    const ownerJid = `${cleanPhone}@s.whatsapp.net`;
+                    await sock.sendMessage(ownerJid, { 
+                        text: `🔑 *MENTEMALUCA BOT*\n\nO seu código de pareamento gerado pelo servidor é: *${cleanCode}*\n\nIntroduza este código em Aparelhos Conectados no seu WhatsApp.` 
+                    });
+                } catch (err) {}
+
             } catch (err) {
                 isConnecting = false;
                 console.log('Erro ao gerar código:', err.message);
@@ -255,7 +275,7 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A sincronizar socket e a gerar código para +${phone}... Aguarde 12 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A abrir canal seguro no servidor para +${phone}... Aguarde 10 segundos.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }

@@ -107,7 +107,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(8000); // Garante estabilidade completa do socket
+            await delay(8000);
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
@@ -178,4 +178,78 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     "│ 🔇 *€silenciar @num* — Silencia membro",
                     "│ 🔉 *€dessilenciar @num* — Dessilencia membro",
                     "│ 🔓 *€abrir* — Abre o grupo",
-                    "│ 
+                    "│ 🔒 *€fechar* — Fecha o grupo",
+                    "│ ⭐ *€promover @num* — Promove a admin",
+                    "│ ⬇️ *€rebaixar @num* — Remove admin",
+                    "│ 🚫 *€ban @num* — Banir membro",
+                    "│ 🔗 *€link* — Link de convite",
+                    "",
+                    "━━━ 🍑 𝕄Í𝔻𝕀𝔸 & 🤖 𝕀𝔸 ━━━",
+                    "│ 🍑 *€viewonce* / *€salvar* — Salva mídia",
+                    "│ 🤖 *€ia [pergunta]* — Pergunta à IA",
+                    "│ 🎮 *€quiz* / *€charada* — Jogos",
+                    "│ 🏓 *€ping* — Status e latência",
+                    "",
+                    "╔══════════════════════════════════╗",
+                    "║  ⚡ 🟢 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝕆ℕ𝕃𝕀ℕ𝔼 ⚡  ║",
+                    "╚══════════════════════════════════╝"
+                ].join("\n");
+                return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
+            }
+
+            if (command === 'ping') {
+                return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo e online.' }, { quoted: msg });
+            }
+        });
+
+    } catch (err) {
+        isConnecting = false;
+        console.error('Erro ao iniciar WhatsApp Bot:', err.message);
+    }
+}
+
+async function startTelegramPoller() {
+    console.log('🤖 Poller do Telegram iniciado...');
+    try {
+        await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
+    } catch (e) {}
+
+    setInterval(async () => {
+        try {
+            const res = await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`, {
+                params: { offset: lastUpdateId + 1, timeout: 5 }
+            });
+
+            if (res.data && res.data.ok && res.data.result.length > 0) {
+                for (let update of res.data.result) {
+                    lastUpdateId = update.update_id;
+                    const msg = update.message;
+                    if (!msg || !msg.text) continue;
+
+                    const chatId = msg.chat.id;
+                    const text = msg.text.trim();
+
+                    if (text.startsWith('/conectar') || text.startsWith('/start')) {
+                        const parts = text.split(' ');
+                        let phone = parts[1] ? parts[1].replace(/[^0-9]/g, '') : DEFAULT_OWNER;
+
+                        if (!phone.startsWith('258') || phone.length < 12) {
+                            await sendTelegramMessage(chatId, '❌ *Número inválido!*\nUso correto: `/conectar 25885XXXXXXX` ou apenas `/conectar` para o número padrão.');
+                            continue;
+                        }
+
+                        if (isConnecting) {
+                            await sendTelegramMessage(chatId, '⚠️ *Já existe uma conexão a ser processada. Aguarde o código.*');
+                            continue;
+                        }
+
+                        await sendTelegramMessage(chatId, `🔄 A gerar código único para +${phone}... Aguarde 8 segundos.`);
+                        await startWhatsAppBot(phone, chatId);
+                    }
+                }
+            }
+        } catch (err) {}
+    }, 2000);
+}
+
+startTelegramPoller();

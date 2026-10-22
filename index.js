@@ -72,7 +72,8 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: Browsers.macOS('Desktop'),
+            // Alterado para Ubuntu/Chrome para aceitar o pareamento tal como o outro bot
+            browser: Browsers.ubuntu('Chrome'),
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))

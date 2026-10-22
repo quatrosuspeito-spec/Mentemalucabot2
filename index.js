@@ -1,3 +1,10 @@
+process.on('uncaughtException', (err) => {
+    console.error('❌ [ERRO NÃO CAPTURADO]:', err.stack || err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ [REJEIÇÃO NÃO TRATADA]:', reason);
+});
 const {
     default: makeWASocket,
     useMultiFileAuthState,

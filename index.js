@@ -41,6 +41,9 @@ let lastUpdateId = 0;
 let isConnecting = false;
 const mutedUsers = new Set();
 
+// Armazena temporariamente o chat do Telegram enquanto aguarda o número
+let pendingTelegramAuth = null;
+
 async function sendTelegramMessage(chatId, text, replyMarkup = null) {
     try {
         const payload = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
@@ -72,7 +75,8 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: Browsers.macOS('Chrome'),
+            // Configurado exatamente como o bot funcional para evitar rejeição
+            browser: Browsers.ubuntu('Chrome'),
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -101,24 +105,34 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 isConnecting = false;
                 console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');
                 
-                // Envia mensagem de confirmação para o próprio número conectado (Saved Messages / Chat Próprio)
+                // Mensagem de sucesso idêntica ao modelo funcional enviado para o WhatsApp
                 try {
                     const ownerJid = `${targetPhone}@s.whatsapp.net`;
                     await sock.sendMessage(ownerJid, { 
-                        text: "⚡ *MENTEMALUCA BOT*\n\n✅ *WhatsApp conectado com sucesso ao bot!*\nO sistema está totalmente online e pronto a usar os comandos com o prefixo `€`." 
+                        text: `✅ *SESSÃO CONECTADA!*\n\nO número *${targetPhone}* agora está ativo no sistema. 🚀\n\nComo utilizar:\nAbra o seu WhatsApp e digite o comando abaixo no seu próprio chat ou em um grupo:\n\n📌 \`${PREFIX}menu\`` 
                     });
-                } catch (e) {
-                    console.log('[ERRO AO ENVIAR MENSAGEM DE CONEXÃO NO WHATSAPP]', e.message);
-                }
+                } catch (e) {}
 
                 if (telegramChatId) {
-                    await sendTelegramMessage(telegramChatId, '✅ *WhatsApp conectado com sucesso ao bot!*');
+                    const sucessoTelegram = [
+                        "✅ *SESSÃO CONECTADA!*",
+                        "",
+                        `O número *${targetPhone}* agora está ativo no sistema. 🚀`,
+                        "",
+                        "Como utilizar:",
+                        "Abra o seu WhatsApp (o número que você acabou de conectar) e digite o comando abaixo no seu próprio chat ou em um grupo:",
+                        "",
+                        `📌 \`${PREFIX}menu\``,
+                        "",
+                        "Aproveite todas as funções do bot!"
+                    ].join("\n");
+                    await sendTelegramMessage(telegramChatId, sucessoTelegram);
                 }
             }
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(9000);
+            await delay(7000); // Tempo otimizado para sincronizar com Ubuntu/Chrome
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
@@ -136,16 +150,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     ]
                 };
 
-                // Envia para o Telegram e também tenta enviar o código para as mensagens guardadas do próprio número no WhatsApp se possível
                 await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
-                
-                try {
-                    const ownerJid = `${cleanPhone}@s.whatsapp.net`;
-                    await sock.sendMessage(ownerJid, { 
-                        text: `🔮 *MENTEMALUCA BOT - PAREAMENTO*\n\n🔑 O teu código de pareamento é: *${cleanCode}*\n\nVá em Aparelhos Conectados > Conectar com número de telemóvel para concluir.` 
-                    });
-                } catch (err) {}
-
             } catch (err) {
                 isConnecting = false;
                 console.log('Erro ao gerar código:', err.message);
@@ -234,7 +239,7 @@ async function startTelegramPoller() {
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
     } catch (e) {}
 
-setInterval(async () => {
+    setInterval(async () => {
         try {
             const res = await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`, {
                 params: { offset: lastUpdateId + 1, timeout: 5 }
@@ -249,12 +254,18 @@ setInterval(async () => {
                     const chatId = msg.chat.id;
                     const text = msg.text.trim();
 
-                    if (text.startsWith('/conectar') || text.startsWith('/start')) {
-                        const parts = text.split(' ');
-                        let phone = parts[1] ? parts[1].replace(/[^0-9]/g, '') : DEFAULT_OWNER;
+                    if (text.startsWith('/start') || text.startsWith('/conectar')) {
+                        pendingTelegramAuth = chatId;
+                        await sendTelegramMessage(chatId, '📱 Por favor, envie agora o seu número de telemóvel com o prefixo do país (Ex: `258856868102`):');
+                        continue;
+                    }
+
+                    // Se o utilizador mandou o número após o /start (exatamente igual ao outro bot)
+                    if (/^\d{10,15}$/.test(text)) {
+                        let phone = text.replace(/[^0-9]/g, '');
 
                         if (!phone.startsWith('258') || phone.length < 12) {
-                            await sendTelegramMessage(chatId, '❌ *Número inválido!*\nUso correto: `/conectar 25885XXXXXXX` ou apenas `/conectar` para o número padrão.');
+                            await sendTelegramMessage(chatId, '❌ *Número inválido!*\nUse o formato correto com o prefixo de Moçambique: `25885XXXXXXX`');
                             continue;
                         }
 
@@ -263,8 +274,9 @@ setInterval(async () => {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A preparar o pedido para +${phone}... Aguarde 9 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A gerar código para +${phone}... Aguarde 7 segundos.`);
                         await startWhatsAppBot(phone, chatId);
+                        pendingTelegramAuth = null;
                     }
                 }
             }

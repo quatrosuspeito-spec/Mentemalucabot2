@@ -8,6 +8,7 @@ process.on('unhandledRejection', (reason) => {
 const http = require('http');
 const PORT = process.env.PORT || 3000;
 
+// Servidor HTTP único e permanente
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Mentemaluca Bot Online');
@@ -39,6 +40,7 @@ const tgAxios = axios.create({ httpsAgent, timeout: 10000 });
 
 let globalSock = null;
 let lastUpdateId = 0;
+let isConnecting = false;
 const mutedUsers = new Set();
 let activeQuiz = {};
 let activeCharadas = {};
@@ -63,9 +65,7 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
             text: text,
             parse_mode: 'Markdown'
         };
-        if (replyMarkup) {
-            payload.reply_markup = replyMarkup;
-        }
+        if (replyMarkup) payload.reply_markup = replyMarkup;
         await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, payload);
     } catch (e) {
         console.log('[TELEGRAM ERR]', e.message);
@@ -73,7 +73,15 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
 }
 
 async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = null) {
+    if (isConnecting && !telegramChatId) return;
+    isConnecting = true;
+
     try {
+        if (globalSock) {
+            try { globalSock.end(undefined); } catch (e) {}
+            globalSock = null;
+        }
+
         if (telegramChatId && fs.existsSync('./session')) {
             try { fs.rmSync('./session', { recursive: true, force: true }); } catch (e) {}
         }
@@ -85,6 +93,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
+            // Simulação estável de navegador Desktop para evitar rejeição
             browser: Browsers.macOS('Desktop'),
             auth: {
                 creds: state.creds,
@@ -92,7 +101,8 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             },
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 15000
+            keepAliveIntervalMs: 15000,
+            markOnlineOnConnect: true
         });
 
         globalSock = sock;
@@ -100,14 +110,18 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
 
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update;
+            
             if (connection === 'close') {
+                isConnecting = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const shouldReconnect = (statusCode !== DisconnectReason.loggedOut);
+                
                 if (shouldReconnect) {
                     await delay(3000);
                     startWhatsAppBot(targetPhone, null);
                 }
             } else if (connection === 'open') {
+                isConnecting = false;
                 console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');
                 if (telegramChatId) {
                     await sendTelegramMessage(telegramChatId, '✅ *WhatsApp conectado com sucesso ao bot!*');
@@ -115,35 +129,39 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             }
         });
 
+        // Solicitação do Código de Pareamento de forma síncrona com o Socket
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            setTimeout(async () => {
-                try {
-                    await delay(4000);
-                    const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
-                    const rawCode = await sock.requestPairingCode(cleanPhone);
-                    const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
-                    
-                    console.log(`🔑 CÓDIGO DE PAREAMENTO: ${cleanCode}`);
-                    const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${cleanCode}\`\n\n👉 *Instruções:* Vá ao WhatsApp > Aparelhos Conectados > Conectar com número de telemóvel.`;
-                    
-                    const replyMarkup = {
-                        inline_keyboard: [
-                            [
-                                {
-                                    text: "📋 COPIAR CÓDIGO",
-                                    copy_text: { text: cleanCode }
-                                }
-                            ]
+            await delay(6000); // Aguarda o tempo necessário para o socket estar 100% pronto
+            
+            try {
+                const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+                const rawCode = await sock.requestPairingCode(cleanPhone);
+                const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
+
+                console.log(`🔑 CÓDIGO GERADO COM SUCESSO: ${cleanCode}`);
+
+                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${cleanCode}\`\n\n👉 *Instruções:* Vá ao WhatsApp > Aparelhos Conectados > Conectar com número de telemóvel.`;
+
+                const replyMarkup = {
+                    inline_keyboard: [
+                        [
+                            {
+                                text: "📋 COPIAR CÓDIGO",
+                                copy_text: { text: cleanCode }
+                            }
                         ]
-                    };
-                    await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
-                } catch (err) {
-                    console.log('Erro ao gerar código:', err.message);
-                    await sendTelegramMessage(telegramChatId, `❌ *Erro ao gerar código:* ${err.message}`);
-                }
-            }, 5000);
+                    ]
+                };
+
+                await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
+            } catch (err) {
+                isConnecting = false;
+                console.log('Erro ao gerar código:', err.message);
+                await sendTelegramMessage(telegramChatId, `❌ *Erro ao solicitar código ao WhatsApp:* ${err.message}. Tente novamente.`);
+            }
         }
 
+        // Comandos e Gestão do Bot
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
             const msg = messages[0];
@@ -183,15 +201,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     delete activeCharadas[from];
                     return;
                 }
-            }
-
-            if (aiAutoGroups.has(from) && !body.startsWith(PREFIX) && !msg.key.fromMe) {
-                try {
-                    const response = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(body)}&format=json`);
-                    const respostaIA = response.data.AbstractText || "Interessante! Estou a processar a sua mensagem.";
-                    await sock.sendMessage(from, { text: `🤖 *IA:* ${respostaIA}` }, { quoted: msg });
-                } catch (e) {}
-                return;
             }
 
             if (!body.startsWith(PREFIX)) return;
@@ -248,62 +257,8 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 return sock.sendMessage(from, { text: menuTexto }, { quoted: msg });
             }
 
-            if (command === 'crash_android') {
-                const alvo = args[0] || 'Alvo não especificado';
-                return sock.sendMessage(from, { text: `⚠️ Comando \`crash_android\` executado contra: *${alvo}*` }, { quoted: msg });
-            }
-
-            if (command === 'crash_ios_invi') {
-                const alvo = args[0] || 'Alvo não especificado';
-                return sock.sendMessage(from, { text: `⚠️ Comando \`crash_ios_invi\` executado contra: *${alvo}*` }, { quoted: msg });
-            }
-
-            if (command === 'carosel_atraso') {
-                return sock.sendMessage(from, { text: `⚠️ Função \`carosel_atraso\` aplicada com sucesso.` }, { quoted: msg });
-            }
-
-            if (command === 'atraso_home') {
-                return sock.sendMessage(from, { text: `⚠️ Função \`atraso_home\` configurada.` }, { quoted: msg });
-            }
-
-            if (command === 'crash_chat_ios') {
-                return sock.sendMessage(from, { text: `⚠️ Comando \`crash_chat_ios\` disparado.` }, { quoted: msg });
-            }
-
-            if (command === 'crash_chat_android') {
-                return sock.sendMessage(from, { text: `⚠️ Comando \`crash_chat_android\` disparado.` }, { quoted: msg });
-            }
-
-            if (command === 'reverso') {
-                return sock.sendMessage(from, { text: `🔄 Modo \`reverso\` ativado para a mensagem citada.` }, { quoted: msg });
-            }
-
-            if (command === 'idgp') {
-                return sock.sendMessage(from, { text: `🆔 ID deste grupo: \`${from}\`` }, { quoted: msg });
-            }
-
-            if (command === 'ban&&') {
-                if (!isGroup || !isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar este comando!' }, { quoted: msg });
-                try {
-                    const meta = await sock.groupMetadata(from);
-                    const targets = meta.participants.filter(p => !p.admin && !p.id.includes(DEFAULT_OWNER)).map(p => p.id);
-                    for (let t of targets) {
-                        await sock.groupParticipantsUpdate(from, [t], 'remove');
-                        await delay(500);
-                    }
-                    return sock.sendMessage(from, { text: '🚫 \`ban&&\` executado com sucesso!' });
-                } catch (e) {
-                    return sock.sendMessage(from, { text: '❌ O bot precisa de privilégios de Administrador.' });
-                }
-            }
-
             if (command === 'ping') {
-                return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo, rápido e online.' }, { quoted: msg });
-            }
-
-            if (command === 'hora') {
-                const dataHora = new Date().toLocaleString('pt-PT', { timeZone: 'Africa/Maputo' });
-                return sock.sendMessage(from, { text: `🌍 Hora atual em Moçambique: *${dataHora}*` }, { quoted: msg });
+                return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo e online.' }, { quoted: msg });
             }
 
             if (command === 'quiz') {
@@ -330,89 +285,10 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 }
             }
 
-            if (command === 'nuke') {
-                if (!isGroup || !isOwner) return sock.sendMessage(from, { text: '❌ Apenas o dono pode usar em grupos!' }, { quoted: msg });
-                try {
-                    const meta = await sock.groupMetadata(from);
-                    const targets = meta.participants.filter(p => !p.admin && !p.id.includes(DEFAULT_OWNER)).map(p => p.id);
-                    for (let t of targets) {
-                        await sock.groupParticipantsUpdate(from, [t], 'remove');
-                        await delay(1000);
-                    }
-                    return sock.sendMessage(from, { text: '💥 Nuke concluído!' });
-                } catch (e) {
-                    return sock.sendMessage(from, { text: '❌ O bot precisa de ser Administrador.' });
-                }
-            }
-
-            if (command === 'ban') {
-                if (!isGroup || !isOwner) return;
-                const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                if (mentioned.length > 0) {
-                    await sock.groupParticipantsUpdate(from, mentioned, 'remove');
-                    return sock.sendMessage(from, { text: '🚫 Membro banido com sucesso!' }, { quoted: msg });
-                }
-            }
-
-            if (command === 'silenciar') {
-                if (!isGroup || !isOwner) return;
-                const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                if (mentioned.length > 0) {
-                    mutedUsers.add(mentioned[0].replace(/[^0-9]/g, ''));
-                    return sock.sendMessage(from, { text: '🔇 Membro silenciado!' }, { quoted: msg });
-                }
-            }
-
-            if (command === 'dessilenciar') {
-                if (!isGroup || !isOwner) return;
-                const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                if (mentioned.length > 0) {
-                    mutedUsers.delete(mentioned[0].replace(/[^0-9]/g, ''));
-                    return sock.sendMessage(from, { text: '🔉 Membro dessilenciado!' }, { quoted: msg });
-                }
-            }
-
-            if (command === 'abrir' && isGroup && isOwner) {
-                await sock.groupSettingUpdate(from, 'not_announcement');
-                return sock.sendMessage(from, { text: '🔓 Grupo aberto!' }, { quoted: msg });
-            }
-
-            if (command === 'fechar' && isGroup && isOwner) {
-                await sock.groupSettingUpdate(from, 'announcement');
-                return sock.sendMessage(from, { text: '🔒 Grupo fechado!' }, { quoted: msg });
-            }
-
-            if (command === 'promover' && isGroup && isOwner) {
-                const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                if (mentioned.length > 0) {
-                    await sock.groupParticipantsUpdate(from, mentioned, 'promote');
-                    return sock.sendMessage(from, { text: '⭐ Membro promovido a admin!' }, { quoted: msg });
-                }
-            }
-
-            if (command === 'rebaixar' && isGroup && isOwner) {
-                const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                if (mentioned.length > 0) {
-                    await sock.groupParticipantsUpdate(from, mentioned, 'demote');
-                    return sock.sendMessage(from, { text: '⬇️ Membro rebaixado!' }, { quoted: msg });
-                }
-            }
-
-            if (command === 'link') {
-                if (!isGroup) return;
-                try {
-                    const code = await sock.groupInviteCode(from);
-                    return sock.sendMessage(from, { text: `🔗 https://chat.whatsapp.com/${code}` }, { quoted: msg });
-                } catch (e) {}
-            }
-
             if (command === 'salvar' || command === 'viewonce') {
                 const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                 if (!quoted) return sock.sendMessage(from, { text: '❌ Marque uma imagem ou vídeo viewonce/mídia!' }, { quoted: msg });
                 try {
-                    const mediaMsg = quoted.imageMessage || quoted.videoMessage;
-                    if (!mediaMsg) return sock.sendMessage(from, { text: '❌ A mensagem citada não contém mídia válida.' }, { quoted: msg });
-                    
                     const buffer = await downloadMediaMessage({ message: quoted }, 'buffer', {});
                     if (quoted.imageMessage) {
                         await sock.sendMessage(from, { image: buffer, caption: '✅ Mídia recuperada com sucesso!' });
@@ -424,7 +300,9 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 }
             }
         });
+
     } catch (err) {
+        isConnecting = false;
         console.error('Erro ao iniciar WhatsApp Bot:', err.message);
     }
 }
@@ -459,7 +337,7 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A limpar sessão anterior e a gerar código para +${phone}... Aguarde.`);
+                        await sendTelegramMessage(chatId, `🔄 A preparar nova sessão no servidor para +${phone}... Aguarde 6 segundos pelo código.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }

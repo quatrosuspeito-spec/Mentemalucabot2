@@ -76,10 +76,9 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
             },
-            // Aumenta o tempo limite para evitar que o código expire enquanto digitas no WhatsApp
-            connectTimeoutMs: 120000,
-            defaultQueryTimeoutMs: 120000,
-            keepAliveIntervalMs: 20000,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 15000,
             markOnlineOnConnect: true
         });
 
@@ -102,13 +101,13 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');
                 
                 if (telegramChatId) {
-                    await sendTelegramMessage(telegramChatId, `✅ *SESSÃO CONECTADA com sucesso para +${targetPhone}!* 🚀\n\n📌 Digite \`${PREFIX}menu\` no WhatsApp.`);
+                    await sendTelegramMessage(telegramChatId, `✅ *SESSÃO CONECTADA com sucesso para +${targetPhone}!* 🚀`);
                 }
             }
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(10000);
+            await delay(8000);
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
@@ -118,7 +117,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 isConnecting = false;
                 console.log(`🔑 CÓDIGO GERADO COM SUCESSO: ${cleanCode}`);
 
-                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${cleanCode}\`\n\n👉 *ATENÇÃO:* Insira o código no WhatsApp **imediatamente** em menos de 15 segundos!`;
+                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${cleanCode}\`\n\n👉 *Instruções:* Vá ao WhatsApp > Aparelhos Conectados > Conectar com número de telemóvel e insira o código rapidamente.`;
 
                 const replyMarkup = {
                     inline_keyboard: [
@@ -152,7 +151,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 const menuTexto = [
                     "╔══════════════════════════════════╗",
                     "║  🔮 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝔹𝕆𝕋 (V75) 🔮 ║",
-                    "║       ✦ 𝑏𝑜𝑡 𝑑𝑜 𝑑𝑜𝓃𝑜 ✦       ║",
+                    "║       ✦ 𝑏𝑜𝑡 𝑑𝑜 𝑑𝑜𝑛𝑜 ✦       ║",
                     "╠══════════════════════════════════╣",
                     "╚══════════════════════════════════╝",
                     "",
@@ -231,7 +230,7 @@ async function startTelegramPoller() {
                     const text = msg.text.trim();
 
                     if (text.startsWith('/start') || text.startsWith('/conectar')) {
-                        await sendTelegramMessage(chatId, '📱 Por favor, envie agora o seu número de telemóvel com o prefixo do país (Ex: `258856868102`):');
+                        await sendTelegramMessage(chatId, '📱 Envia o teu número de telemóvel com o prefixo (Ex: `258856868102`):');
                         continue;
                     }
 
@@ -239,16 +238,16 @@ async function startTelegramPoller() {
                         let phone = text.replace(/[^0-9]/g, '');
 
                         if (!phone.startsWith('258') || phone.length < 12) {
-                            await sendTelegramMessage(chatId, '❌ *Número inválido!*\nUse o formato correto com o prefixo de Moçambique: `25885XXXXXXX`');
+                            await sendTelegramMessage(chatId, '❌ *Número inválido!*\nUsa o formato correto: `25885XXXXXXX`');
                             continue;
                         }
 
                         if (isConnecting) {
-                            await sendTelegramMessage(chatId, '⚠️ *Já existe uma conexão a ser processada. Aguarde o código.*');
+                            await sendTelegramMessage(chatId, '⚠️ *Já existe uma tentativa em curso. Aguarda.*');
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A gerar código único para +${phone}... Aguarde 10 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A gerar código numérico para +${phone}... Aguarda 8 segundos.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }

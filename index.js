@@ -8,7 +8,6 @@ process.on('unhandledRejection', (reason) => {
 const http = require('http');
 const PORT = process.env.PORT || 3000;
 
-// Servidor HTTP único e permanente
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Mentemaluca Bot Online');
@@ -44,7 +43,6 @@ let isConnecting = false;
 const mutedUsers = new Set();
 let activeQuiz = {};
 let activeCharadas = {};
-let aiAutoGroups = new Set();
 
 const quizDatabase = [
     { pergunta: "Qual é a capital de Moçambique?", opcoes: "A) Beira\nB) Maputo\nC) Nampula\nD) Pemba", resposta: "B" },
@@ -73,7 +71,13 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
 }
 
 async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = null) {
-    if (isConnecting && !telegramChatId) return;
+    if (isConnecting) {
+        if (telegramChatId) {
+            await sendTelegramMessage(telegramChatId, '⚠️ *Já existe uma tentativa de conexão em curso.* Aguarde alguns segundos.');
+        }
+        return;
+    }
+    
     isConnecting = true;
 
     try {
@@ -93,7 +97,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            // Simulação estável de navegador Desktop para evitar rejeição
             browser: Browsers.macOS('Desktop'),
             auth: {
                 creds: state.creds,
@@ -129,15 +132,15 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             }
         });
 
-        // Solicitação do Código de Pareamento de forma síncrona com o Socket
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(6000); // Aguarda o tempo necessário para o socket estar 100% pronto
+            await delay(7000); // Aguarda a estabilização completa do socket
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
                 const rawCode = await sock.requestPairingCode(cleanPhone);
                 const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
 
+                isConnecting = false;
                 console.log(`🔑 CÓDIGO GERADO COM SUCESSO: ${cleanCode}`);
 
                 const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${cleanCode}\`\n\n👉 *Instruções:* Vá ao WhatsApp > Aparelhos Conectados > Conectar com número de telemóvel.`;
@@ -159,9 +162,10 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 console.log('Erro ao gerar código:', err.message);
                 await sendTelegramMessage(telegramChatId, `❌ *Erro ao solicitar código ao WhatsApp:* ${err.message}. Tente novamente.`);
             }
+        } else {
+            isConnecting = false;
         }
 
-        // Comandos e Gestão do Bot
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
             const msg = messages[0];
@@ -182,26 +186,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                          msg.message.extendedTextMessage?.text ||
                          msg.message.imageMessage?.caption ||
                          msg.message.videoMessage?.caption || '').trim();
-
-            if (activeQuiz[from] && ['A', 'B', 'C', 'D'].includes(body.toUpperCase())) {
-                const q = activeQuiz[from];
-                if (body.toUpperCase() === q.resposta) {
-                    await sock.sendMessage(from, { text: `🎉 *CORRETO!* A resposta era a letra *${q.resposta}*.` }, { quoted: msg });
-                } else {
-                    await sock.sendMessage(from, { text: `❌ *ERRADO!* A resposta correta era a letra *${q.resposta}*.` }, { quoted: msg });
-                }
-                delete activeQuiz[from];
-                return;
-            }
-
-            if (activeCharadas[from]) {
-                const respCerta = activeCharadas[from];
-                if (body.toLowerCase().includes(respCerta)) {
-                    await sock.sendMessage(from, { text: `🎉 *ACERTOU!* A resposta era *${respCerta}*.` }, { quoted: msg });
-                    delete activeCharadas[from];
-                    return;
-                }
-            }
 
             if (!body.startsWith(PREFIX)) return;
             const args = body.slice(PREFIX.length).trim().split(/ +/);
@@ -260,45 +244,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             if (command === 'ping') {
                 return sock.sendMessage(from, { text: '🏓 Pong! Bot ativo e online.' }, { quoted: msg });
             }
-
-            if (command === 'quiz') {
-                const randomQuiz = quizDatabase[Math.floor(Math.random() * quizDatabase.length)];
-                activeQuiz[from] = randomQuiz;
-                return sock.sendMessage(from, { text: `🎮 *QUIZ MENTEMALUCA*\n\n❓ *Pergunta:* ${randomQuiz.pergunta}\n\n${randomQuiz.opcoes}\n\n👉 *Responda apenas com a letra (A, B, C ou D)!*` }, { quoted: msg });
-            }
-
-            if (command === 'charada') {
-                const r = charadasDatabase[Math.floor(Math.random() * charadasDatabase.length)];
-                activeCharadas[from] = r.resposta;
-                return sock.sendMessage(from, { text: `🧩 *CHARADA*\n\n❓ ${r.pergunta}\n\n👉 Envie a resposta no chat!` }, { quoted: msg });
-            }
-
-            if (command === 'ia') {
-                const pergunta = args.join(' ');
-                if (!pergunta) return sock.sendMessage(from, { text: '❌ Faça uma pergunta: €ia <texto>' }, { quoted: msg });
-                try {
-                    const response = await axios.get(`https://api.duckduckgo.com/?q=${encodeURIComponent(pergunta)}&format=json`);
-                    const respostaIA = response.data.AbstractText || "Percebi a sua questão. Estou online para o ajudar.";
-                    return sock.sendMessage(from, { text: `🤖 *IA:* ${respostaIA}` }, { quoted: msg });
-                } catch (e) {
-                    return sock.sendMessage(from, { text: '❌ Erro ao consultar a IA.' }, { quoted: msg });
-                }
-            }
-
-            if (command === 'salvar' || command === 'viewonce') {
-                const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
-                if (!quoted) return sock.sendMessage(from, { text: '❌ Marque uma imagem ou vídeo viewonce/mídia!' }, { quoted: msg });
-                try {
-                    const buffer = await downloadMediaMessage({ message: quoted }, 'buffer', {});
-                    if (quoted.imageMessage) {
-                        await sock.sendMessage(from, { image: buffer, caption: '✅ Mídia recuperada com sucesso!' });
-                    } else if (quoted.videoMessage) {
-                        await sock.sendMessage(from, { video: buffer, caption: '✅ Mídia recuperada com sucesso!' });
-                    }
-                } catch (err) {
-                    return sock.sendMessage(from, { text: '❌ Erro ao descarregar a mídia.' }, { quoted: msg });
-                }
-            }
         });
 
     } catch (err) {
@@ -337,7 +282,7 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A preparar nova sessão no servidor para +${phone}... Aguarde 6 segundos pelo código.`);
+                        await sendTelegramMessage(chatId, `🔄 A preparar nova sessão no servidor para +${phone}... Aguarde 7 segundos pelo código único.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }

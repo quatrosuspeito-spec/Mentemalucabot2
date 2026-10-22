@@ -39,10 +39,6 @@ const tgAxios = axios.create({ httpsAgent, timeout: 10000 });
 let globalSock = null;
 let lastUpdateId = 0;
 let isConnecting = false;
-const mutedUsers = new Set();
-
-// Armazena temporariamente o chat do Telegram enquanto aguarda o número
-let pendingTelegramAuth = null;
 
 async function sendTelegramMessage(chatId, text, replyMarkup = null) {
     try {
@@ -75,7 +71,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            // Configurado exatamente como o bot funcional para evitar rejeição
             browser: Browsers.ubuntu('Chrome'),
             auth: {
                 creds: state.creds,
@@ -105,34 +100,22 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 isConnecting = false;
                 console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');
                 
-                // Mensagem de sucesso idêntica ao modelo funcional enviado para o WhatsApp
                 try {
                     const ownerJid = `${targetPhone}@s.whatsapp.net`;
                     await sock.sendMessage(ownerJid, { 
-                        text: `✅ *SESSÃO CONECTADA!*\n\nO número *${targetPhone}* agora está ativo no sistema. 🚀\n\nComo utilizar:\nAbra o seu WhatsApp e digite o comando abaixo no seu próprio chat ou em um grupo:\n\n📌 \`${PREFIX}menu\`` 
+                        text: `✅ *SESSÃO CONECTADA!*\n\nO número *${targetPhone}* agora está ativo no sistema. 🚀\n\n📌 Digite \`${PREFIX}menu\` para testar.` 
                     });
                 } catch (e) {}
 
                 if (telegramChatId) {
-                    const sucessoTelegram = [
-                        "✅ *SESSÃO CONECTADA!*",
-                        "",
-                        `O número *${targetPhone}* agora está ativo no sistema. 🚀`,
-                        "",
-                        "Como utilizar:",
-                        "Abra o seu WhatsApp (o número que você acabou de conectar) e digite o comando abaixo no seu próprio chat ou em um grupo:",
-                        "",
-                        `📌 \`${PREFIX}menu\``,
-                        "",
-                        "Aproveite todas as funções do bot!"
-                    ].join("\n");
-                    await sendTelegramMessage(telegramChatId, sucessoTelegram);
+                    await sendTelegramMessage(telegramChatId, `✅ *SESSÃO CONECTADA com sucesso para o número +${targetPhone}!* 🚀`);
                 }
             }
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(7000); // Tempo otimizado para sincronizar com Ubuntu/Chrome
+            // Tempo alargado para 12 segundos para garantir que o WhatsApp aceita a chave do cloud IP
+            await delay(12000);
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
@@ -255,12 +238,10 @@ async function startTelegramPoller() {
                     const text = msg.text.trim();
 
                     if (text.startsWith('/start') || text.startsWith('/conectar')) {
-                        pendingTelegramAuth = chatId;
                         await sendTelegramMessage(chatId, '📱 Por favor, envie agora o seu número de telemóvel com o prefixo do país (Ex: `258856868102`):');
                         continue;
                     }
 
-                    // Se o utilizador mandou o número após o /start (exatamente igual ao outro bot)
                     if (/^\d{10,15}$/.test(text)) {
                         let phone = text.replace(/[^0-9]/g, '');
 
@@ -274,9 +255,8 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A gerar código para +${phone}... Aguarde 7 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A sincronizar socket e a gerar código para +${phone}... Aguarde 12 segundos.`);
                         await startWhatsAppBot(phone, chatId);
-                        pendingTelegramAuth = null;
                     }
                 }
             }

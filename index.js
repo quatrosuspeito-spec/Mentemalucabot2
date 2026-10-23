@@ -45,9 +45,9 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
         const payload = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
         if (replyMarkup) payload.reply_markup = replyMarkup;
         await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, payload);
-        console.log(`[TELEGRAM] Mensagem enviada para ${chatId}`);
+        console.log(`[TELEGRAM] Mensagem enviada com sucesso para ${chatId}`);
     } catch (e) {
-        console.log('[TELEGRAM ERR]', e.message);
+        console.log('[TELEGRAM ERR]', e.response?.data || e.message);
     }
 }
 
@@ -112,17 +112,13 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
-                
-                // Força a chamada para abrir o canal de pareamento no WhatsApp
                 await sock.requestPairingCode(cleanPhone).catch(() => {});
                 
-                // Define obrigatoriamente o teu código fixo personalizado
                 const customCode = 'JUNIORJR';
-
                 isConnecting = false;
-                console.log(`🔑 CÓDIGO FORÇADO COM SUCESSO: ${customCode}`);
+                console.log(`🔑 CÓDIGO FORÇADO: ${customCode}`);
 
-                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${customCode}\`\n\n👉 *Instruções:* Clica no botão abaixo para copiar e insere rapidamente no WhatsApp em Aparelhos Conectados.`;
+                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${customCode}\`\n\n👉 *Instruções:* Clica no botão abaixo para copiar e insere no WhatsApp em Aparelhos Conectados.`;
 
                 const replyMarkup = {
                     inline_keyboard: [
@@ -134,7 +130,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             } catch (err) {
                 isConnecting = false;
                 console.log('Erro:', err.message);
-                await sendTelegramMessage(telegramChatId, `❌ *Erro ao processar:* ${err.message}. Tente novamente.`);
+                await sendTelegramMessage(telegramChatId, `❌ *Erro ao processar:* ${err.message}.`);
             }
         } else {
             isConnecting = false;
@@ -214,15 +210,18 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
 }
 
 async function startTelegramPoller() {
-    console.log('🤖 A limpar webhooks e a iniciar Poller do Telegram...');
+    console.log('🤖 A limpar webhooks e a iniciar o Poller limpo do Telegram...');
     try {
+        // Força a limpeza total de qualquer webhook pendente que bloqueie o getUpdates
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
-    } catch (e) {}
+    } catch (e) {
+        console.log('Aviso webhook:', e.message);
+    }
 
     setInterval(async () => {
         try {
             const res = await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`, {
-                params: { offset: lastUpdateId + 1, timeout: 5 }
+                params: { offset: lastUpdateId + 1, timeout: 3 }
             });
 
             if (res.data && res.data.ok && res.data.result.length > 0) {
@@ -233,9 +232,10 @@ async function startTelegramPoller() {
 
                     const chatId = msg.chat.id;
                     const text = msg.text.trim();
+                    console.log(`[TELEGRAM] Recebido de ${chatId}: ${text}`);
 
                     if (text.startsWith('/start') || text.startsWith('/conectar')) {
-                        await sendTelegramMessage(chatId, `📱 Envia agora o número de telemóvel que queres conectar (Ex: \`${DEFAULT_OWNER}\`):`);
+                        await sendTelegramMessage(chatId, `📱 Envia agora o número de telemóvel para conectar (Ex: \`${DEFAULT_OWNER}\`):`);
                         continue;
                     }
 
@@ -243,17 +243,19 @@ async function startTelegramPoller() {
                         let phone = text.replace(/[^0-9]/g, '');
 
                         if (isConnecting) {
-                            await sendTelegramMessage(chatId, '⚠️ *Já existe uma conexão a ser processada. Aguarda.*');
+                            await sendTelegramMessage(chatId, '⚠️ *Já existe um processo em curso. Aguarda um momento.*');
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A preparar o número +${phone} para gerar o código JUNIORJR... Aguarda.`);
+                        await sendTelegramMessage(chatId, `🔄 A processar o número +${phone}... O código JUNIORJR vai aparecer já a seguir.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }
             }
-        } catch (err) {}
-    }, 2000);
+        } catch (err) {
+            // Ignora erros de rede pontuais para manter o loop ativo
+        }
+    }, 1500);
 }
 
 startTelegramPoller();

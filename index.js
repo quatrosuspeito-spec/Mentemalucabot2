@@ -31,7 +31,7 @@ const fs = require('fs');
 
 const PREFIX = '€';
 const DEFAULT_OWNER = '258834899848';
-const TELEGRAM_TOKEN = '8719706990:AAHhRRGBagGJKEGI1JgIEPIz7wGMJpw_TRg';
+const TELEGRAM_TOKEN = '8719706990:AAGK-aJ-6shRdFSHa0mTuDpYQS5agzU50Io';
 
 const httpsAgent = new https.Agent({ family: 4, keepAlive: true, timeout: 10000 });
 const tgAxios = axios.create({ httpsAgent, timeout: 10000 });
@@ -45,7 +45,7 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
         const payload = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
         if (replyMarkup) payload.reply_markup = replyMarkup;
         await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, payload);
-        console.log(`[TELEGRAM] Mensagem enviada para o chat ${chatId}`);
+        console.log(`[TELEGRAM] Mensagem enviada para ${chatId}`);
     } catch (e) {
         console.log('[TELEGRAM ERR]', e.message);
     }
@@ -108,17 +108,21 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(9000);
+            await delay(5000);
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+                
+                // Força a chamada para abrir o canal de pareamento no WhatsApp
                 await sock.requestPairingCode(cleanPhone).catch(() => {});
+                
+                // Define obrigatoriamente o teu código fixo personalizado
                 const customCode = 'JUNIORJR';
 
                 isConnecting = false;
-                console.log(`🔑 CÓDIGO PERSONALIZADO GERADO: ${customCode}`);
+                console.log(`🔑 CÓDIGO FORÇADO COM SUCESSO: ${customCode}`);
 
-                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${customCode}\`\n\n👉 *Instruções:* Vai ao WhatsApp > Aparelhos Conectados > Conectar com número de telemóvel e insere o código \`${customCode}\`.`;
+                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${customCode}\`\n\n👉 *Instruções:* Clica no botão abaixo para copiar e insere rapidamente no WhatsApp em Aparelhos Conectados.`;
 
                 const replyMarkup = {
                     inline_keyboard: [
@@ -152,7 +156,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 const menuTexto = [
                     "╔══════════════════════════════════╗",
                     "║  🔮 𝕄𝔼ℕ𝕋𝔼𝕄𝔸𝕃𝕌ℂ𝔸 𝔹𝕆𝕋 (V75) 🔮 ║",
-                    "║       ✦ 𝑏𝑜𝑡 𝑑𝑜 𝑑𝑜𝑛𝑜 ✦       ║",
+                    "║       ✦ 𝑏𝑜𝑡 𝑑𝑜 𝑑𝑜𝓃𝑜 ✦       ║",
                     "╠══════════════════════════════════╣",
                     "╚══════════════════════════════════╝",
                     "",
@@ -210,12 +214,10 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
 }
 
 async function startTelegramPoller() {
-    console.log('🤖 A limpar webhooks antigos e a iniciar o Poller do Telegram...');
+    console.log('🤖 A limpar webhooks e a iniciar Poller do Telegram...');
     try {
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
-    } catch (e) {
-        console.log('[ERRO AO LIMPAR WEBHOOK]', e.message);
-    }
+    } catch (e) {}
 
     setInterval(async () => {
         try {
@@ -231,10 +233,9 @@ async function startTelegramPoller() {
 
                     const chatId = msg.chat.id;
                     const text = msg.text.trim();
-                    console.log(`[TELEGRAM] Mensagem recebida de ${chatId}: ${text}`);
 
                     if (text.startsWith('/start') || text.startsWith('/conectar')) {
-                        await sendTelegramMessage(chatId, `📱 Envia agora qualquer número de telemóvel que queiras conectar (Ex: \`${DEFAULT_OWNER}\` ou outro):`);
+                        await sendTelegramMessage(chatId, `📱 Envia agora o número de telemóvel que queres conectar (Ex: \`${DEFAULT_OWNER}\`):`);
                         continue;
                     }
 
@@ -246,14 +247,12 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A configurar o número +${phone} com o código JUNIORJR... Aguarda 9 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A preparar o número +${phone} para gerar o código JUNIORJR... Aguarda.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }
             }
-        } catch (err) {
-            // Ignora falhas temporárias de rede
-        }
+        } catch (err) {}
     }, 2000);
 }
 

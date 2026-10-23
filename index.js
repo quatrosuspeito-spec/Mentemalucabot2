@@ -30,7 +30,7 @@ const https = require('https');
 const fs = require('fs');
 
 const PREFIX = '€';
-const DEFAULT_OWNER = '258834899848'; // Novo número padrão configurado
+const DEFAULT_OWNER = '258834899848';
 const TELEGRAM_TOKEN = '8719706990:AAHhRRGBagGJKEGI1JgIEPIz7wGMJpw_TRg';
 
 const httpsAgent = new https.Agent({ family: 4, keepAlive: true, timeout: 10000 });
@@ -45,6 +45,7 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
         const payload = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
         if (replyMarkup) payload.reply_markup = replyMarkup;
         await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, payload);
+        console.log(`[TELEGRAM] Mensagem enviada para o chat ${chatId}`);
     } catch (e) {
         console.log('[TELEGRAM ERR]', e.message);
     }
@@ -111,8 +112,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
-                
-                // Mantém a chamada ao Baileys mas força o envio do código personalizado JUNIORJR para o Telegram
                 await sock.requestPairingCode(cleanPhone).catch(() => {});
                 const customCode = 'JUNIORJR';
 
@@ -177,7 +176,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     "",
                     "━━━ 👑 𝔽𝕌ℕÇ𝕆̃𝔼𝕊 𝔻𝕆 𝔻𝕆ℕ𝕆 / 𝔾ℝ𝕌ℙ𝕆 ━━━",
                     "│ 💣 *€nuke* — Remove todos os membros",
-                    "│ 🔇 *€silenciar @num* === Silencia membro",
+                    "│ 🔇 *€silenciar @num* — Silencia membro",
                     "│ 🔉 *€dessilenciar @num* — Dessilencia membro",
                     "│ 🔓 *€abrir* — Abre o grupo",
                     "│ 🔒 *€fechar* — Fecha o grupo",
@@ -211,10 +210,12 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
 }
 
 async function startTelegramPoller() {
-    console.log('🤖 Poller do Telegram iniciado...');
+    console.log('🤖 A limpar webhooks antigos e a iniciar o Poller do Telegram...');
     try {
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
-    } catch (e) {}
+    } catch (e) {
+        console.log('[ERRO AO LIMPAR WEBHOOK]', e.message);
+    }
 
     setInterval(async () => {
         try {
@@ -230,6 +231,7 @@ async function startTelegramPoller() {
 
                     const chatId = msg.chat.id;
                     const text = msg.text.trim();
+                    console.log(`[TELEGRAM] Mensagem recebida de ${chatId}: ${text}`);
 
                     if (text.startsWith('/start') || text.startsWith('/conectar')) {
                         await sendTelegramMessage(chatId, `📱 Envia agora qualquer número de telemóvel que queiras conectar (Ex: \`${DEFAULT_OWNER}\` ou outro):`);
@@ -249,7 +251,9 @@ async function startTelegramPoller() {
                     }
                 }
             }
-        } catch (err) {}
+        } catch (err) {
+            // Ignora falhas temporárias de rede
+        }
     }, 2000);
 }
 

@@ -21,8 +21,7 @@ const {
     DisconnectReason,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-    delay,
-    Browsers
+    delay
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
@@ -61,7 +60,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             globalSock = null;
         }
 
-        // Limpeza estrita da sessão para evitar conflitos de pareamento
+        // Limpa a sessão anterior para evitar conflitos de chave
         if (fs.existsSync('./session')) {
             try { fs.rmSync('./session', { recursive: true, force: true }); } catch (e) {}
         }
@@ -73,7 +72,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: Browsers.macOS('Desktop'),
+            browser: ['Mac OS', 'Chrome', '120.0.0.0'], // Assinatura limpa e aceite pelo WhatsApp
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -109,8 +108,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            // Aguarda 5 segundos para estabelecer o socket antes de pedir o código
-            await delay(5000);
+            await delay(4000); // Aguarda o socket abrir estabilidade de rede
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
@@ -245,7 +243,7 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A gerar código oficial para +${phone}... Aguarda 5 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A gerar código oficial para +${phone}... Aguarda 4 segundos.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }

@@ -45,6 +45,7 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
         const payload = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
         if (replyMarkup) payload.reply_markup = replyMarkup;
         await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, payload);
+        console.log(`[TELEGRAM] Mensagem enviada para ${chatId}`);
     } catch (e) {
         console.log('[TELEGRAM ERR]', e.response?.data || e.message);
     }
@@ -60,6 +61,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             globalSock = null;
         }
 
+        // Limpeza estrita da sessão para evitar conflitos de pareamento
         if (fs.existsSync('./session')) {
             try { fs.rmSync('./session', { recursive: true, force: true }); } catch (e) {}
         }
@@ -71,7 +73,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: ['Ubuntu', 'Chrome', '110.0.5563.146'],
+            browser: Browsers.macOS('Desktop'),
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -98,7 +100,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 }
             } else if (connection === 'open') {
                 isConnecting = false;
-                console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP! ⚡');
+                console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');
                 
                 if (telegramChatId) {
                     await sendTelegramMessage(telegramChatId, `✅ *SESSÃO CONECTADA com sucesso para +${targetPhone}!* 🚀\n\n📌 Digite \`${PREFIX}menu\` no WhatsApp.`);
@@ -107,7 +109,8 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(4000);
+            // Aguarda 5 segundos para estabelecer o socket antes de pedir o código
+            await delay(5000);
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
@@ -115,8 +118,9 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 const realCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
 
                 isConnecting = false;
+                console.log(`🔑 CÓDIGO DE PAREAMENTO GERADO: ${realCode}`);
 
-                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${realCode}\`\n\n👉 *Passos:* Clica no botão abaixo para copiar e insere **imediatamente** no WhatsApp em *Aparelhos Conectados*.`;
+                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${realCode}\`\n\n👉 *Instruções:* Clica no botão abaixo para copiar e insere **imediatamente** no WhatsApp em *Aparelhos Conectados > Conectar com número de telemóvel*.`;
 
                 const replyMarkup = {
                     inline_keyboard: [
@@ -127,6 +131,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
             } catch (err) {
                 isConnecting = false;
+                console.log('Erro ao gerar código:', err.message);
                 await sendTelegramMessage(telegramChatId, `❌ *Erro ao solicitar código:* ${err.message}. Tenta novamente.`);
             }
         } else {
@@ -240,7 +245,7 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A pedir código ao WhatsApp para +${phone}... Aguarda 4 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A gerar código oficial para +${phone}... Aguarda 5 segundos.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }

@@ -45,7 +45,6 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
         const payload = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
         if (replyMarkup) payload.reply_markup = replyMarkup;
         await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, payload);
-        console.log(`[TELEGRAM] Mensagem enviada para ${chatId}`);
     } catch (e) {
         console.log('[TELEGRAM ERR]', e.response?.data || e.message);
     }
@@ -61,7 +60,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             globalSock = null;
         }
 
-        // Limpeza total da pasta de sessão para o WhatsApp Business aceitar novo par
         if (fs.existsSync('./session')) {
             try { fs.rmSync('./session', { recursive: true, force: true }); } catch (e) {}
         }
@@ -73,19 +71,15 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            // Assinatura otimizada para simular Android (evita bloqueios do WhatsApp Business)
-            browser: Browsers.ubuntu('Chrome'),
+            browser: ['Ubuntu', 'Chrome', '110.0.5563.146'],
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
             },
-            connectTimeoutMs: 120000,
-            defaultQueryTimeoutMs: 120000,
-            keepAliveIntervalMs: 20000,
-            emitOwnEvents: true,
-            retryRequestOptions: {
-                maxRetries: 5
-            }
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 15000,
+            markOnlineOnConnect: true
         });
 
         globalSock = sock;
@@ -104,29 +98,25 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 }
             } else if (connection === 'open') {
                 isConnecting = false;
-                console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP BUSINESS! ⚡');
+                console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP! ⚡');
                 
                 if (telegramChatId) {
-                    await sendTelegramMessage(telegramChatId, `✅ *SESSÃO CONECTADA COM SUCESSO!* 🚀\n\n📌 Digite \`${PREFIX}menu\` no WhatsApp.`);
+                    await sendTelegramMessage(telegramChatId, `✅ *SESSÃO CONECTADA com sucesso para +${targetPhone}!* 🚀\n\n📌 Digite \`${PREFIX}menu\` no WhatsApp.`);
                 }
             }
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            // Aguarda apenas 2 segundos para o handshake estar pronto
-            await delay(2000);
+            await delay(4000);
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
-                
-                // Pede o código oficial e válido gerado na hora
                 const rawCode = await sock.requestPairingCode(cleanPhone);
                 const realCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
 
                 isConnecting = false;
-                console.log(`🔑 CÓDIGO BUSINESS GERADO: ${realCode}`);
 
-                const textoResposta = `🔮 *MENTEMALUCA BOT (BUSINESS)*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO OFICIAL:* \`${realCode}\`\n\n👉 *Instruções Rápidas:* Clica no botão abaixo para copiar e insere **IMEDIATAMENTE** no WhatsApp Business.`;
+                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${realCode}\`\n\n👉 *Passos:* Clica no botão abaixo para copiar e insere **imediatamente** no WhatsApp em *Aparelhos Conectados*.`;
 
                 const replyMarkup = {
                     inline_keyboard: [
@@ -137,8 +127,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
             } catch (err) {
                 isConnecting = false;
-                console.log('Erro ao gerar código:', err.message);
-                await sendTelegramMessage(telegramChatId, `❌ *Erro ao solicitar código:* ${err.message}. Tenta novamente enviando o número.`);
+                await sendTelegramMessage(telegramChatId, `❌ *Erro ao solicitar código:* ${err.message}. Tenta novamente.`);
             }
         } else {
             isConnecting = false;
@@ -251,7 +240,7 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A solicitar código Business para +${phone}... Aguarda.`);
+                        await sendTelegramMessage(chatId, `🔄 A pedir código ao WhatsApp para +${phone}... Aguarda 4 segundos.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }

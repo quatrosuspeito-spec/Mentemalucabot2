@@ -61,7 +61,8 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             globalSock = null;
         }
 
-        if (telegramChatId && fs.existsSync('./session')) {
+        // LIMPEZA TOTAL DA PASTA DE SESSÃO
+        if (fs.existsSync('./session')) {
             try { fs.rmSync('./session', { recursive: true, force: true }); } catch (e) {}
         }
 
@@ -72,7 +73,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: Browsers.macOS('Desktop'),
+            browser: Browsers.ubuntu('Chrome'),
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -108,17 +109,20 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(6000);
+            // Reduzido para 3 segundos para o código não expirar
+            await delay(3000);
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+                
+                // Gera o código novo e limpo direto do WhatsApp
                 const rawCode = await sock.requestPairingCode(cleanPhone);
                 const realCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
 
                 isConnecting = false;
                 console.log(`🔑 CÓDIGO OFICIAL GERADO: ${realCode}`);
 
-                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO VÁLIDO:* \`${realCode}\`\n\n👉 *Passos:* Clica no botão abaixo para copiar o código oficial e cola-o imediatamente no WhatsApp.`;
+                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO OFICIAL VÁLIDO:*\n\n\`${realCode}\`\n\n👉 *ATENÇÃO:* Clica no botão abaixo para copiar o código e cola-o **IMEDIATAMENTE** no WhatsApp em *Aparelhos Conectados*.`;
 
                 const replyMarkup = {
                     inline_keyboard: [
@@ -174,7 +178,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     "│ 🆔 *€idgp* — Obtém o ID do grupo",
                     "│ 🚫 *€ban&&* — Remove todos (Admin)",
                     "",
-                    "━━━ 👑 𝔽𝕌ℕÇ𝕆̃𝔼𝕊 𝔻𝕆 𝔻𝕆ℕ𝕆 / 𝔾ℝ𝕌ℙ𝕆 ━━━",
+                    "━━━ 👑 𝔽𝕌ℕÇ𝕆̃𝔼̃𝕊 𝔻𝕆 𝔻𝕆ℕ𝕆 / 𝔾ℝ𝕌ℙ𝕆 ━━━",
                     "│ 💣 *€nuke* — Remove todos os membros",
                     "│ 🔇 *€silenciar @num* — Silencia membro",
                     "│ 🔉 *€dessilenciar @num* — Dessilencia membro",
@@ -243,7 +247,7 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A pedir o código ao WhatsApp para +${phone}... Aguarda 6 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A gerar um novo código oficial para +${phone}... Aguarda 3 segundos.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }

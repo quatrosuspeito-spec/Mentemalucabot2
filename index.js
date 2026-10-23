@@ -72,7 +72,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: Browsers.ubuntu('Chrome'),
+            browser: Browsers.macOS('Desktop'),
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -112,15 +112,13 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
-                
-                // Solicita o código VÁLIDO diretamente dos servidores do WhatsApp
                 const rawCode = await sock.requestPairingCode(cleanPhone);
                 const realCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
 
                 isConnecting = false;
-                console.log(`🔑 CÓDIGO REAL DO WHATSAPP GERADO: ${realCode}`);
+                console.log(`🔑 CÓDIGO OFICIAL GERADO: ${realCode}`);
 
-                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${realCode}\`\n\n👉 *Instruções:* Clica no botão abaixo para copiar e insere rapidamente no WhatsApp em Aparelhos Conectados.`;
+                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO VÁLIDO:* \`${realCode}\`\n\n👉 *Passos:* Clica no botão abaixo para copiar o código oficial e cola-o imediatamente no WhatsApp.`;
 
                 const replyMarkup = {
                     inline_keyboard: [
@@ -132,7 +130,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             } catch (err) {
                 isConnecting = false;
                 console.log('Erro ao gerar código:', err.message);
-                await sendTelegramMessage(telegramChatId, `❌ *Erro ao solicitar código ao WhatsApp:* ${err.message}. Tente novamente enviando o número.`);
+                await sendTelegramMessage(telegramChatId, `❌ *Erro ao solicitar código:* ${err.message}. Tenta enviar o número outra vez.`);
             }
         } else {
             isConnecting = false;
@@ -233,7 +231,7 @@ async function startTelegramPoller() {
                     const text = msg.text.trim();
 
                     if (text.startsWith('/start') || text.startsWith('/conectar')) {
-                        await sendTelegramMessage(chatId, `📱 Envia agora o número de telemóvel para conectar (Ex: \`${DEFAULT_OWNER}\`):`);
+                        await sendTelegramMessage(chatId, `📱 Envia o número de telemóvel para conectar (Ex: \`${DEFAULT_OWNER}\`):`);
                         continue;
                     }
 
@@ -241,11 +239,11 @@ async function startTelegramPoller() {
                         let phone = text.replace(/[^0-9]/g, '');
 
                         if (isConnecting) {
-                            await sendTelegramMessage(chatId, '⚠️ *Já existe uma conexão a ser processada. Aguarda um momento.*');
+                            await sendTelegramMessage(chatId, '⚠️ *Já existe um processo a decorrer. Aguarda uns segundos.*');
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A solicitar o código oficial do WhatsApp para +${phone}... Aguarda 6 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A pedir o código ao WhatsApp para +${phone}... Aguarda 6 segundos.`);
                         await startWhatsAppBot(phone, chatId);
                     }
                 }

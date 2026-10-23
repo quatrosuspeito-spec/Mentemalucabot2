@@ -31,7 +31,7 @@ const fs = require('fs');
 
 const PREFIX = '€';
 const DEFAULT_OWNER = '258834899848';
-const TELEGRAM_TOKEN = '8719706990:AAGK-aJ-6shRdFSHa0mTuDpYQS5agzU50Io';
+const TELEGRAM_TOKEN = '8719706990:AAFFMY9H910_dQhLga5K3ZUZkHibkIrFlsk'; // Token atualizado da imagem
 
 const httpsAgent = new https.Agent({ family: 4, keepAlive: true, timeout: 10000 });
 const tgAxios = axios.create({ httpsAgent, timeout: 10000 });
@@ -210,9 +210,8 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
 }
 
 async function startTelegramPoller() {
-    console.log('🤖 A limpar webhooks e a iniciar o Poller limpo do Telegram...');
+    console.log('🤖 A limpar webhooks e a iniciar o Poller do Telegram com o novo token...');
     try {
-        // Força a limpeza total de qualquer webhook pendente que bloqueie o getUpdates
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
     } catch (e) {
         console.log('Aviso webhook:', e.message);
@@ -252,9 +251,7 @@ async function startTelegramPoller() {
                     }
                 }
             }
-        } catch (err) {
-            // Ignora erros de rede pontuais para manter o loop ativo
-        }
+        } catch (err) {}
     }, 1500);
 }
 

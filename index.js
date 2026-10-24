@@ -36,13 +36,25 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
         const payload = { chat_id: chatId, text: text, parse_mode: 'Markdown' };
         if (replyMarkup) payload.reply_markup = replyMarkup;
         await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, payload);
-        console.log(`[TELEGRAM] Mensagem enviada para ${chatId}`);
     } catch (e) {
         console.log('[TELEGRAM ERR]', e.response?.data || e.message);
     }
 }
 
-async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = null) {
+async function sendTelegramPhoto(chatId, photoUrl, caption) {
+    try {
+        await tgAxios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendPhoto`, {
+            chat_id: chatId,
+            photo: photoUrl,
+            caption: caption,
+            parse_mode: 'Markdown'
+        });
+    } catch (e) {
+        console.log('[TELEGRAM PHOTO ERR]', e.response?.data || e.message);
+    }
+}
+
+async function startWhatsAppBot(targetPhone = null, telegramChatId = null, mode = 'code') {
     if (isConnecting) return;
     isConnecting = true;
 
@@ -89,8 +101,15 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         sock.ev.on('creds.update', saveCreds);
 
         sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect } = update;
+            const { connection, lastDisconnect, qr } = update;
             
+            // Se o modo for QR Code, envia a imagem assim que o QR for gerado pelo Baileys
+            if (qr && mode === 'qr' && telegramChatId) {
+                isConnecting = false;
+                const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
+                await sendTelegramPhoto(telegramChatId, qrImageUrl, "📸 *SEU QR CODE DE PAREAMENTO:*\n\nAbra o WhatsApp ➔ *Aparelhos Conectados* ➔ *Conectar um Aparelho* e escaneie esta imagem.");
+            }
+
             if (connection === 'close') {
                 isConnecting = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
@@ -104,12 +123,12 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 console.log('⚡ 🟢 MENTEMALUCA BOT ONLINE NO WHATSAPP COM SUCESSO! ⚡');
                 
                 if (telegramChatId) {
-                    await sendTelegramMessage(telegramChatId, `✅ *SESSÃO CONECTADA com sucesso para +${targetPhone}!* 🚀\n\n📌 Digite \`${PREFIX}menu\` no WhatsApp.`);
+                    await sendTelegramMessage(telegramChatId, `✅ *SESSÃO CONECTADA COM SUCESSO!* 🚀\n\n📌 Digite \`${PREFIX}menu\` no WhatsApp.`);
                 }
             }
         });
 
-        if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
+        if (!sock.authState.creds.registered && mode === 'code' && targetPhone && telegramChatId) {
             await delay(6000); 
             
             try {
@@ -118,7 +137,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 const formattedCode = rawCode ? rawCode.match(/.{1,4}/g)?.join('-') || rawCode : '';
 
                 isConnecting = false;
-                console.log(`🔑 CÓDIGO DE PAREAMENTO: ${formattedCode}`);
 
                 const textoResposta = [
                     "🔒 *Seu Código de Pareamento:*",
@@ -142,11 +160,8 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                 await sendTelegramMessage(telegramChatId, textoResposta, replyMarkup);
             } catch (err) {
                 isConnecting = false;
-                console.log('Erro ao gerar código:', err.message);
                 await sendTelegramMessage(telegramChatId, `❌ *Erro ao solicitar código:* ${err.message}. Tenta novamente.`);
             }
-        } else {
-            isConnecting = false;
         }
 
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
@@ -187,7 +202,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     "│ 🆔 *€idgp* — Obtém o ID do grupo",
                     "│ 🚫 *€ban&&* — Remove todos (Admin)",
                     "",
-                    "━━━ 👑 𝔽𝕌ℕÇ𝕆̃𝔼𝕊 𝔻𝕆 𝔻𝕆ℕ𝕆 / 𝔾ℝ𝕌ℙ𝕆 ━━━",
+                    "━━━ 👑 𝔽𝕌ℕÇ𝕆̃𝔼SB 𝔻𝕆 𝔻𝕆ℕ𝕆 / 𝔾ℝ𝕌ℙ𝕆 ━━━",
                     "│ 💣 *€nuke* — Remove todos os membros",
                     "│ 🔇 *€silenciar @num* — Silencia membro",
                     "│ 🔉 *€dessilenciar @num* — Dessilencia membro",
@@ -243,8 +258,13 @@ async function startTelegramPoller() {
                     const chatId = msg.chat.id;
                     const text = msg.text.trim();
 
-                    if (text.startsWith('/start') || text.startsWith('/conectar')) {
-                        await sendTelegramMessage(chatId, `📱 Envia o número de telemóvel para conectar (Ex: \`${DEFAULT_OWNER}\`):`);
+                    if (text.startsWith('/start') || text.startsWith('/qr')) {
+                        if (isConnecting) {
+                            await sendTelegramMessage(chatId, '⚠️ *Já existe uma tentativa a decorrer. Aguarde uns segundos.*');
+                            continue;
+                        }
+                        await sendTelegramMessage(chatId, '📷 *A gerar imagem do QR Code para o WhatsApp... Aguarda 5 segundos.*');
+                        startWhatsAppBot(null, chatId, 'qr');
                         continue;
                     }
 
@@ -257,7 +277,7 @@ async function startTelegramPoller() {
                         }
 
                         await sendTelegramMessage(chatId, `🔄 A gerar código de pareamento para +${phone}... Aguarda 6 segundos.`);
-                        startWhatsAppBot(phone, chatId);
+                        startWhatsAppBot(phone, chatId, 'code');
                     }
                 }
             }

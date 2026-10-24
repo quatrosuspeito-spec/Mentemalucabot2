@@ -1,20 +1,14 @@
 {
-  "name": "mentemalucabot2",
-  "version": "2.0.0",
-  "description": "Bot WhatsApp Baileys com Telegram",
+  "name": "mentemalucabot",
+  "version": "1.0.0",
   "main": "index.js",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.0",
+    "axios": "^1.6.8",
+    "https-proxy-agent": "^7.0.4",
+    "pino": "^8.19.0"
+  },
   "scripts": {
     "start": "node index.js"
-  },
-  "dependencies": {
-    "@whiskeysockets/baileys": "6.5.0",
-    "axios": "^1.7.9",
-    "dotenv": "^16.4.7",
-    "google-tts-api": "^0.0.6",
-    "node-telegram-bot-api": "^0.66.0",
-    "pino": "^9.6.0"
-  },
-  "engines": {
-    "node": "20.x"
   }
 }

@@ -15,14 +15,6 @@ http.createServer((req, res) => {
     console.log(`[HTTP] Servidor a escutar na porta ${PORT}`);
 });
 
-const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    DisconnectReason,
-    fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore,
-    delay
-} = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
 const https = require('https');
@@ -55,6 +47,17 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
     isConnecting = true;
 
     try {
+        const baileys = await import('@whiskeysockets/baileys');
+        const makeWASocket = baileys.default;
+        const {
+            useMultiFileAuthState,
+            DisconnectReason,
+            fetchLatestBaileysVersion,
+            makeCacheableSignalKeyStore,
+            delay,
+            Browsers
+        } = baileys;
+
         if (globalSock) {
             try { globalSock.end(undefined); } catch (e) {}
             globalSock = null;
@@ -71,7 +74,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: ['Mac OS', 'Chrome', '120.0.0.0'],
+            browser: Browsers.macOS('Desktop'),
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -107,21 +110,32 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(4000);
+            await delay(6000); 
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
                 const rawCode = await sock.requestPairingCode(cleanPhone);
-                const realCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
+                const formattedCode = rawCode ? rawCode.match(/.{1,4}/g)?.join('-') || rawCode : '';
 
                 isConnecting = false;
-                console.log(`🔑 CÓDIGO DE PAREAMENTO GERADO: ${realCode}`);
+                console.log(`🔑 CÓDIGO DE PAREAMENTO: ${formattedCode}`);
 
-                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${realCode}\`\n\n👉 *Instruções:* Clica no botão abaixo para copiar e insere **imediatamente** no WhatsApp em *Aparelhos Conectados > Conectar com número de telemóvel*.`;
+                const textoResposta = [
+                    "🔒 *Seu Código de Pareamento:*",
+                    "",
+                    `\`${formattedCode}\``,
+                    "",
+                    "📌 *Como conectar:*",
+                    "• O WhatsApp deve mostrar a notificação de pareamento.",
+                    "• Toque e insira exatamente o código acima.",
+                    "",
+                    "⚠️ *Caso não apareça:*",
+                    "• WhatsApp ➔ Dispositivos Conectados ➔ Conectar"
+                ].join("\n");
 
                 const replyMarkup = {
                     inline_keyboard: [
-                        [{ text: "📋 COPIAR CÓDIGO", copy_text: { text: realCode } }]
+                        [{ text: "📋 COPIAR CÓDIGO", copy_text: { text: formattedCode } }]
                     ]
                 };
 
@@ -160,7 +174,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     `  👑 Dono: *+${DEFAULT_OWNER}*`,
                     "  🔑 Prefixo: *€*",
                     "",
-                    "━━━ 📱 𝔹𝕌𝔾𝕊 𝔸ℕ𝔻ℝ𝕆𝕀D / 🇮🇴🇸 ━━━",
+                    "━━━ 📱 𝔹𝕌𝔾𝕊 𝔸ℕ𝔻ℝOID / 🇮🇴🇸 ━━━",
                     "│ 💥 *€crash_android* — Crash para Android",
                     "│ ⚡ *€crash_ios_invi* — Crash invisível iOS",
                     "│ 🎠 *€carosel_atraso* — Carrossel de atraso",
@@ -242,7 +256,7 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A gerar código oficial para +${phone}... Aguarda 4 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A gerar código de pareamento para +${phone}... Aguarda 6 segundos.`);
                         startWhatsAppBot(phone, chatId);
                     }
                 }

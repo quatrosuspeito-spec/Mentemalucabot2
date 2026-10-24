@@ -15,16 +15,22 @@ http.createServer((req, res) => {
     console.log(`[HTTP] Servidor a escutar na porta ${PORT}`);
 });
 
+const {
+    default: makeWASocket,
+    useMultiFileAuthState,
+    DisconnectReason,
+    fetchLatestBaileysVersion,
+    makeCacheableSignalKeyStore,
+    delay
+} = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
 const https = require('https');
 const fs = require('fs');
-const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const PREFIX = '€';
 const DEFAULT_OWNER = '258834899848';
 const TELEGRAM_TOKEN = '8719706990:AAFFMY9H910_dQhLga5K3ZUZkHibkIrFlsk';
-const PROXY_URL = process.env.PROXY_URL || ''; 
 
 const httpsAgent = new https.Agent({ family: 4, keepAlive: true, timeout: 10000 });
 const tgAxios = axios.create({ httpsAgent, timeout: 10000 });
@@ -49,18 +55,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
     isConnecting = true;
 
     try {
-        // Importação dinâmica compatível com o formato moderno do Baileys
-        const baileys = await import('@whiskeysockets/baileys');
-        const makeWASocket = baileys.default;
-        const {
-            useMultiFileAuthState,
-            DisconnectReason,
-            fetchLatestBaileysVersion,
-            makeCacheableSignalKeyStore,
-            delay,
-            Browsers
-        } = baileys;
-
         if (globalSock) {
             try { globalSock.end(undefined); } catch (e) {}
             globalSock = null;
@@ -73,11 +67,11 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         const { state, saveCreds } = await useMultiFileAuthState('./session');
         const { version } = await fetchLatestBaileysVersion();
 
-        const socketConfig = {
+        const sock = makeWASocket({
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
-            browser: Browsers.macOS('Desktop'),
+            browser: ['Mac OS', 'Chrome', '120.0.0.0'],
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
@@ -86,13 +80,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             defaultQueryTimeoutMs: 60000,
             keepAliveIntervalMs: 15000,
             markOnlineOnConnect: true
-        };
-
-        if (PROXY_URL) {
-            socketConfig.agent = new HttpsProxyAgent(PROXY_URL);
-        }
-
-        const sock = makeWASocket(socketConfig);
+        });
 
         globalSock = sock;
         sock.ev.on('creds.update', saveCreds);
@@ -119,32 +107,21 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(6000); 
+            await delay(4000);
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
                 const rawCode = await sock.requestPairingCode(cleanPhone);
-                const formattedCode = rawCode ? rawCode.match(/.{1,4}/g)?.join('-') || rawCode : '';
+                const realCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
 
                 isConnecting = false;
-                console.log(`🔑 CÓDIGO DE PAREAMENTO: ${formattedCode}`);
+                console.log(`🔑 CÓDIGO DE PAREAMENTO GERADO: ${realCode}`);
 
-                const textoResposta = [
-                    "🔒 *Seu Código de Pareamento:*",
-                    "",
-                    `\`${formattedCode}\``,
-                    "",
-                    "📌 *Como conectar:*",
-                    "• O WhatsApp deve mostrar a notificação de pareamento.",
-                    "• Toque e insira exatamente o código acima.",
-                    "",
-                    "⚠️ *Caso não apareça:*",
-                    "• WhatsApp ➔ Dispositivos Conectados ➔ Conectar"
-                ].join("\n");
+                const textoResposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${cleanPhone}\n🔑 *CÓDIGO DE PAREAMENTO:*\n\n\`${realCode}\`\n\n👉 *Instruções:* Clica no botão abaixo para copiar e insere **imediatamente** no WhatsApp em *Aparelhos Conectados > Conectar com número de telemóvel*.`;
 
                 const replyMarkup = {
                     inline_keyboard: [
-                        [{ text: "📋 COPIAR CÓDIGO", copy_text: { text: formattedCode } }]
+                        [{ text: "📋 COPIAR CÓDIGO", copy_text: { text: realCode } }]
                     ]
                 };
 
@@ -183,7 +160,7 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
                     `  👑 Dono: *+${DEFAULT_OWNER}*`,
                     "  🔑 Prefixo: *€*",
                     "",
-                    "━━━ 📱 𝔹𝕌𝔾𝕊 𝔸ℕ𝔻ℝOID / 🇮🇴🇸 ━━━",
+                    "━━━ 📱 𝔹𝕌𝔾𝕊 𝔸ℕ𝔻ℝ𝕆𝕀D / 🇮🇴🇸 ━━━",
                     "│ 💥 *€crash_android* — Crash para Android",
                     "│ ⚡ *€crash_ios_invi* — Crash invisível iOS",
                     "│ 🎠 *€carosel_atraso* — Carrossel de atraso",
@@ -265,7 +242,7 @@ async function startTelegramPoller() {
                             continue;
                         }
 
-                        await sendTelegramMessage(chatId, `🔄 A gerar código de pareamento para +${phone}... Aguarda 6 segundos.`);
+                        await sendTelegramMessage(chatId, `🔄 A gerar código oficial para +${phone}... Aguarda 4 segundos.`);
                         startWhatsAppBot(phone, chatId);
                     }
                 }

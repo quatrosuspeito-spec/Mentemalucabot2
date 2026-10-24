@@ -28,10 +28,15 @@ const pino = require('pino');
 const axios = require('axios');
 const https = require('https');
 const fs = require('fs');
+const { HttpsProxyAgent } = require('https-proxy-agent'); // Necessário para gerir o proxy
 
 const PREFIX = '€';
 const DEFAULT_OWNER = '258834899848';
 const TELEGRAM_TOKEN = '8719706990:AAFFMY9H910_dQhLga5K3ZUZkHibkIrFlsk';
+
+// Podes definir um proxy gratuito ou privado aqui se necessário, ex: 'http://ip:porta'
+// Se deixares vazio, ele usa a rota padrão otimizada com agente fixo de rede
+const PROXY_URL = process.env.PROXY_URL || ''; 
 
 const httpsAgent = new https.Agent({ family: 4, keepAlive: true, timeout: 10000 });
 const tgAxios = axios.create({ httpsAgent, timeout: 10000 });
@@ -68,7 +73,8 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         const { state, saveCreds } = await useMultiFileAuthState('./session');
         const { version } = await fetchLatestBaileysVersion();
 
-        const sock = makeWASocket({
+        // Configuração de socket com suporte opcional a Proxy para evitar bloqueio de IP
+        const socketConfig = {
             version,
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
@@ -81,7 +87,14 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
             defaultQueryTimeoutMs: 60000,
             keepAliveIntervalMs: 15000,
             markOnlineOnConnect: true
-        });
+        };
+
+        if (PROXY_URL) {
+            socketConfig.agent = new HttpsProxyAgent(PROXY_URL);
+            console.log(`[PROXY] A usar proxy configurado: ${PROXY_URL}`);
+        }
+
+        const sock = makeWASocket(socketConfig);
 
         globalSock = sock;
         sock.ev.on('creds.update', saveCreds);
@@ -108,13 +121,11 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         });
 
         if (!sock.authState.creds.registered && targetPhone && telegramChatId) {
-            await delay(6000); // Tempo ideal para estabilizar o socket antes de pedir o push code
+            await delay(6000); 
             
             try {
                 const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
                 const rawCode = await sock.requestPairingCode(cleanPhone);
-                
-                // Formata o código com hífen (ex: ABCD-1234) tal como na referência
                 const formattedCode = rawCode ? rawCode.match(/.{1,4}/g)?.join('-') || rawCode : '';
 
                 isConnecting = false;

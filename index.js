@@ -15,27 +15,15 @@ http.createServer((req, res) => {
     console.log(`[HTTP] Servidor a escutar na porta ${PORT}`);
 });
 
-const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    DisconnectReason,
-    fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore,
-    delay,
-    Browsers
-} = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
 const https = require('https');
 const fs = require('fs');
-const { HttpsProxyAgent } = require('https-proxy-agent'); // Necessário para gerir o proxy
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const PREFIX = '€';
 const DEFAULT_OWNER = '258834899848';
 const TELEGRAM_TOKEN = '8719706990:AAFFMY9H910_dQhLga5K3ZUZkHibkIrFlsk';
-
-// Podes definir um proxy gratuito ou privado aqui se necessário, ex: 'http://ip:porta'
-// Se deixares vazio, ele usa a rota padrão otimizada com agente fixo de rede
 const PROXY_URL = process.env.PROXY_URL || ''; 
 
 const httpsAgent = new https.Agent({ family: 4, keepAlive: true, timeout: 10000 });
@@ -61,6 +49,18 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
     isConnecting = true;
 
     try {
+        // Importação dinâmica compatível com o formato moderno do Baileys
+        const baileys = await import('@whiskeysockets/baileys');
+        const makeWASocket = baileys.default;
+        const {
+            useMultiFileAuthState,
+            DisconnectReason,
+            fetchLatestBaileysVersion,
+            makeCacheableSignalKeyStore,
+            delay,
+            Browsers
+        } = baileys;
+
         if (globalSock) {
             try { globalSock.end(undefined); } catch (e) {}
             globalSock = null;
@@ -73,7 +73,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
         const { state, saveCreds } = await useMultiFileAuthState('./session');
         const { version } = await fetchLatestBaileysVersion();
 
-        // Configuração de socket com suporte opcional a Proxy para evitar bloqueio de IP
         const socketConfig = {
             version,
             logger: pino({ level: 'silent' }),
@@ -91,7 +90,6 @@ async function startWhatsAppBot(targetPhone = DEFAULT_OWNER, telegramChatId = nu
 
         if (PROXY_URL) {
             socketConfig.agent = new HttpsProxyAgent(PROXY_URL);
-            console.log(`[PROXY] A usar proxy configurado: ${PROXY_URL}`);
         }
 
         const sock = makeWASocket(socketConfig);

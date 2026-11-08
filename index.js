@@ -367,4 +367,57 @@ async function startTelegramPoller() {
                 params: { offset: lastUpdateId + 1, timeout: 5 }
             });
 
-            if (res.data && res.data.ok && res.data.result.length
+            if (res.data && res.data.ok && res.data.result.length > 0) {
+                for (let update of res.data.result) {
+                    lastUpdateId = update.update_id;
+                    const msg = update.message;
+                    if (!msg || !msg.text) continue;
+
+                    const chatId = msg.chat.id;
+                    const text = msg.text.trim();
+                    console.log(`📩 Comando Telegram recebido: ${text}`);
+
+                    if (text.startsWith('/start') || text.startsWith('/conectar')) {
+                        awaitingPhone[chatId] = true;
+                        await sendTelegramMessage(chatId, "🔮 *MENTEMALUCA BOT 2.0*\n\n📱 Por favor, envie agora o **número de telemóvel** que pretende conectar ao WhatsApp (com o código do país).\n\n_Exemplo:_ `258856868102`", "Markdown");
+                        continue;
+                    }
+
+                    if (awaitingPhone[chatId]) {
+                        let phone = text.replace(/[^0-9]/g, '');
+                        if (phone.length < 8) {
+                            await sendTelegramMessage(chatId, "❌ Número inválido. Envie apenas os dígitos com o código do país (Ex: `258856868102`).", "Markdown");
+                            continue;
+                        }
+
+                        delete awaitingPhone[chatId];
+                        await sendTelegramMessage(chatId, `🔄 A preparar sessão e a solicitar código de pareamento para o número +${phone}... Aguarde 6 segundos.`);
+
+                        if (fs.existsSync('./session')) {
+                            try { fs.rmSync('./session', { recursive: true, force: true }); } catch (e) {}
+                        }
+
+                        await startWhatsAppBot();
+                        await new Promise(resolve => setTimeout(resolve, 6000));
+
+                        try {
+                            if (!globalSock) throw new Error("Socket WhatsApp não foi iniciado.");
+                            const rawCode = await globalSock.requestPairingCode(phone);
+                            const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
+                            const formattedCode = cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode;
+
+                            const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 *CÓDIGO DE PAREAMENTO (8 DÍGITOS):*\n\n\`${formattedCode}\`\n\n👉 *Como conectar no WhatsApp:*\n1. Abra o WhatsApp no telemóvel (+${phone})\n2. Vá em *Configurações > Aparelhos Conectados > Conectar um Aparelho*\n3. Clique em *Conectar com número de telemóvel*\n4. Introduza o código acima imediatamente!`;
+                            await sendTelegramMessage(chatId, resposta, 'Markdown');
+                            console.log(`✅ Código gerado com sucesso para ${phone}: ${formattedCode}`);
+                        } catch (err) {
+                            console.log('Erro ao solicitar código:', err);
+                            await sendTelegramMessage(chatId, `❌ Erro do WhatsApp: ${err.message}. Envie /conectar novamente.`);
+                        }
+                    }
+                }
+            }
+        } catch (err) {}
+    }, 2000);
+}
+
+startTelegramPoller();

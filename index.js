@@ -15,7 +15,7 @@ const fs = require('fs');
 
 const PREFIX = '€';
 const DEFAULT_OWNER = '258856868102';
-const TELEGRAM_TOKEN = '9224940368:AAH9UyXp2tv7SDNTisHOTOVLvt3SceZJDKQ';
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '9224940368:AAH9UyXp2tv7SDNTisHOTOVLvt3SceZJDKQ';
 
 const httpsAgent = new https.Agent({
     family: 4,
@@ -196,7 +196,7 @@ async function startWhatsAppBot() {
                 "│ 🍑 *€viewonce* — Revela view once",
                 "│ 🥹 *€salvar* — Guarda mídia citada",
                 "",
-                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝕃 ━━━",
+                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝔃 ━━━",
                 "│ 🤖 *€ia [pergunta]* — Pergunta à IA",
                 "│ 😇 *€ia auto* — Liga IA automática",
                 "│ 🛑 *€ia desligar* — Desliga a IA",

@@ -8,16 +8,6 @@ http.createServer((req, res) => {
     console.log(`[HTTP] Servidor a escutar na porta ${PORT}`);
 });
 
-const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    DisconnectReason,
-    fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore,
-    delay,
-    downloadMediaMessage,
-    Browsers
-} = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
 const https = require('https');
@@ -72,6 +62,18 @@ async function sendTelegramMessage(chatId, text, parseMode = '') {
 }
 
 async function startWhatsAppBot() {
+    const Baileys = await import('@whiskeysockets/baileys');
+    const makeWASocket = Baileys.default;
+    const {
+        useMultiFileAuthState,
+        DisconnectReason,
+        fetchLatestBaileysVersion,
+        makeCacheableSignalKeyStore,
+        delay,
+        downloadMediaMessage,
+        Browsers
+    } = Baileys;
+
     const { state, saveCreds } = await useMultiFileAuthState('./session');
     const { version } = await fetchLatestBaileysVersion();
 
@@ -354,7 +356,7 @@ async function startWhatsAppBot() {
 }
 
 async function startTelegramPoller() {
-    console.log('🤖 A ligar ao Telegram interativo (@mentemalucajr_bot)...');
+    console.log('🤖 A iniciar ligação ao Telegram interativo (@mentemalucajr_bot)...');
     
     try {
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
@@ -397,7 +399,7 @@ async function startTelegramPoller() {
                         }
 
                         await startWhatsAppBot();
-                        await delay(6000);
+                        await new Promise(resolve => setTimeout(resolve, 6000));
 
                         try {
                             if (!globalSock) throw new Error("Socket WhatsApp não foi iniciado.");
@@ -419,5 +421,4 @@ async function startTelegramPoller() {
     }, 2000);
 }
 
-startWhatsAppBot();
 startTelegramPoller();

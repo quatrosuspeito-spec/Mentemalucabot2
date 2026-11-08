@@ -355,13 +355,13 @@ async function startWhatsAppBot() {
 }
 
 async function startTelegramPoller() {
-    console.log('🤖 A ligar e verificar atualizações do Telegram...');
+    console.log('🤖 A iniciar ligação ao Telegram interativo...');
     
     try {
         await tgAxios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true`);
-        console.log('✅ Telegram Poller iniciado com sucesso!');
+        console.log('✅ Telegram conectado com sucesso!');
     } catch (e) {
-        console.log('⚠️ Erro ao ligar ao Telegram:', e.message);
+        console.log('❌ Erro no Token do Telegram (401 Unauthorized). Verifique se o token do BotFather está correto.');
     }
 
     setInterval(async () => {
@@ -378,7 +378,7 @@ async function startTelegramPoller() {
 
                     const chatId = msg.chat.id;
                     const text = msg.text.trim();
-                    console.log(`📩 Comando Telegram recebido de ${chatId}: ${text}`);
+                    console.log(`📩 Comando Telegram recebido: ${text}`);
 
                     if (text.startsWith('/start') || text.startsWith('/conectar')) {
                         awaitingPhone[chatId] = true;

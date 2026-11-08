@@ -196,7 +196,7 @@ async function startWhatsAppBot() {
                 "│ 🍑 *€viewonce* — Revela view once",
                 "│ 🥹 *€salvar* — Guarda mídia citada",
                 "",
-                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝕃 ━━━",
+                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝔃 ━━━",
                 "│ 🤖 *€ia [pergunta]* — Pergunta à IA",
                 "│ 😇 *€ia auto* — Liga IA automática",
                 "│ 🛑 *€ia desligar* — Desliga a IA",
@@ -420,4 +420,5 @@ async function startTelegramPoller() {
     }, 2000);
 }
 
+// ATIVADO: Inicia o serviço do Telegram
 startTelegramPoller();

@@ -15,7 +15,7 @@ const fs = require('fs');
 
 const PREFIX = '€';
 const DEFAULT_OWNER = '258856868102';
-const TELEGRAM_TOKEN = '9224940368:AAH9UyXp2tv7SDNTisHOTOVLvt3SceZJDKQ';
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '9224940368:AAH9UyXp2tv7SDNTisHOTOVLvt3SceZJDKQ';
 
 const httpsAgent = new https.Agent({
     family: 4,
@@ -196,7 +196,7 @@ async function startWhatsAppBot() {
                 "│ 🍑 *€viewonce* — Revela view once",
                 "│ 🥹 *€salvar* — Guarda mídia citada",
                 "",
-                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝔃 ━━━",
+                "━━━ 🤖 𝕀ℕ𝕋𝔼𝕃𝕀𝔾𝔼̂ℕℂ𝕀𝔸 𝔸ℝ𝕋𝕀𝔽𝕀ℂ𝕀𝔸𝕃 ━━━",
                 "│ 🤖 *€ia [pergunta]* — Pergunta à IA",
                 "│ 😇 *€ia auto* — Liga IA automática",
                 "│ 🛑 *€ia desligar* — Desliga a IA",
@@ -407,7 +407,7 @@ async function startTelegramPoller() {
                             if (!globalSock) throw new Error("Socket WhatsApp não foi iniciado.");
                             const rawCode = await globalSock.requestPairingCode(phone);
                             const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
-                            const formattedCode = cleanCode.match(/.{1,4}/g)?.join('-') === null ? cleanCode : cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode;
+                            const formattedCode = cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode;
 
                             const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 *CÓDIGO DE PAREAMENTO (8 DÍGITOS):*\n\n\`${formattedCode}\`\n\n👉 *Como conectar no WhatsApp:*\n1. Abra o WhatsApp no telemóvel (+${phone})\n2. Vá em *Configurações > Aparelhos Conectados > Conectar um Aparelho*\n3. Clique em *Conectar com número de telemóvel*\n4. Introduza o código acima imediatamente!`;
                             await sendTelegramMessage(chatId, resposta, 'Markdown');

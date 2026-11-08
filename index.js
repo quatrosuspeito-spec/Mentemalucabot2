@@ -15,7 +15,7 @@ const fs = require('fs');
 
 const PREFIX = '€';
 const DEFAULT_OWNER = '258856868102';
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '9224940368:AAH9UyXp2tv7SDNTisHOTOVLvt3SceZJDKQ';
+const TELEGRAM_TOKEN = '9224940368:AAH9UyXp2tv7SDNTisHOTOVLvt3SceZJDKQ';
 
 const httpsAgent = new https.Agent({
     family: 4,
@@ -44,7 +44,7 @@ const quizDatabase = [
 
 const charadasDatabase = [
     { pergunta: "O que é, o que é? Tem cabeça e tem dente, não é bicho e nem é gente.", resposta: "alho" },
-    { pergunta: "O que é, o que é? Quanto mais se tira, maior fica.", resposta: "buraco" },
+    { pergunta: "O que é, o what é? Quanto mais se tira, maior fica.", resposta: "buraco" },
     { pergunta: "O que é, o que é? Dá muitas voltas e não sai do lugar.", resposta: "relogio" }
 ];
 

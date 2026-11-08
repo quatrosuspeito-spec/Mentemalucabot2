@@ -407,7 +407,7 @@ async function startTelegramPoller() {
                             if (!globalSock) throw new Error("Socket WhatsApp não foi iniciado.");
                             const rawCode = await globalSock.requestPairingCode(phone);
                             const cleanCode = rawCode ? rawCode.replace(/[^A-Z0-9]/gi, '') : '';
-                            const formattedCode = cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode;
+                            const formattedCode = cleanCode.match(/.{1,4}/g)?.join('-') === null ? cleanCode : cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode;
 
                             const resposta = `🔮 *MENTEMALUCA BOT*\n\n📱 Número: +${phone}\n🔑 *CÓDIGO DE PAREAMENTO (8 DÍGITOS):*\n\n\`${formattedCode}\`\n\n👉 *Como conectar no WhatsApp:*\n1. Abra o WhatsApp no telemóvel (+${phone})\n2. Vá em *Configurações > Aparelhos Conectados > Conectar um Aparelho*\n3. Clique em *Conectar com número de telemóvel*\n4. Introduza o código acima imediatamente!`;
                             await sendTelegramMessage(chatId, resposta, 'Markdown');
